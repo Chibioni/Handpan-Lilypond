@@ -237,12 +237,71 @@
     )
 )
 
-#(value-test (cons 'style 'default) '(style . default))
+
+% note系テスト用ユーティリティ関数群
+#(define (make-test-pitch pitch)
+  (ly:make-pitch 0 pitch NATURAL))
+
+#(define (make-test-duration dur)
+  (make-duration-obj dur))
+
+#(define (make-test-tweaks style)
+  (list (cons 'style style)))
+
+#(define (expected-note-event pitch duration style)
+  (make-music
+    'NoteEvent
+    'pitch (make-test-pitch pitch)
+    'duration (make-test-duration duration)
+    'tweaks (make-test-tweaks style)
+  ))
+
 
 % make-base-note 正常な引数のテスト
 #(test-ok
     make-base-note
     `(
-        ((0 4 default) . ,(make-music 'NoteEvent 'pitch (ly:make-pitch 0 0 NATURAL) 'duration (make-duration-obj 4) 'tweaks (list (cons 'style 'default))) )
+        (( 0 4 default) . ,(expected-note-event 0 4  'default))
+        (( 0 8 default) . ,(expected-note-event 0 8  'default))
+        ((10 4 default) . ,(expected-note-event 10 4 'default))
+        ((10 8 default) . ,(expected-note-event 10 8 'default))
+
+        (( 3  2 harmonic) . ,(expected-note-event  3  2 'harmonic))
+        (( 3 16 harmonic) . ,(expected-note-event  3 16 'harmonic))
+        ((-2  2 harmonic) . ,(expected-note-event -2  2 'harmonic))
+        ((-2 16 harmonic) . ,(expected-note-event -2 16 'harmonic))
+
+        (( 4  1 harmonic-black) . ,(expected-note-event  4  1 'harmonic-black))
+        (( 4 32 harmonic-black) . ,(expected-note-event  4 32 'harmonic-black))
+        ((15  1 harmonic-black) . ,(expected-note-event 15  1 'harmonic-black))
+        ((15 32 harmonic-black) . ,(expected-note-event 15 32 'harmonic-black))
+
     )
+)
+
+% make-base-note 異常な引数のテスト
+#(test-error
+  make-base-note
+  '(
+    ;; arity 異常
+    ()
+    (60)
+    (60 4)
+    (60 4 'normal 'extra)
+
+    ;; pitch 異常
+    (#t 4 'normal)
+    ("C4" 4 'normal)
+    ((1 2) 4 'normal)
+
+    ;; head-style 異常
+    (60 4 "normal")
+    (60 4 #t)
+    (60 4 123)
+
+    ;; duration 異常
+    (60 #t normal)
+    (60 "4th" normal)
+    (60 (4) normal)
+  )
 )

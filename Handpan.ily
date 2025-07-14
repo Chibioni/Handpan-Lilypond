@@ -320,15 +320,24 @@ SetTranslateTable =
 %   通常          : 'normal
 %   ハーモニクス1 : 'harmonic
 %   ハーモニクス2 : 'harmonic-black
+% テスト書いた
 #(define (make-base-note pitch duration head-style)
-  (let* (
-      (duration-obj (make-duration-obj duration))
-    )
-    (make-music
-      'NoteEvent
-      'pitch (ly:make-pitch 0 pitch NATURAL)
-      'duration duration-obj
-      'tweaks (list (cons 'style head-style))
+  (cond 
+    ((not (integer? pitch))
+      (error "make-base-note: pitch must be an integer, got:" pitch))
+    ((not (symbol? head-style))
+      (error "make-base-note: head-style must be a symbol, got:" head-style))
+    (else 
+      (let* (
+          (duration-obj (make-duration-obj duration))
+        )
+        (make-music
+          'NoteEvent
+          'pitch (ly:make-pitch 0 pitch NATURAL)
+          'duration duration-obj
+          'tweaks (list (cons 'style head-style))
+        )
+      )
     )
   )
 )
