@@ -2,7 +2,7 @@
 \version "2.24.4"
 
 \include "test-functions.ily"
-\include "Handpan.ily"
+\include "../Handpan.ily"
 
 % split-score 正常時のテスト
 #(test-ok
