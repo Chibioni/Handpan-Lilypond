@@ -339,6 +339,7 @@
   )
 )
 
+% make-chord-group のテスト
 #(test-ok
     make-chord-group
     `(
@@ -353,3 +354,40 @@
     ((1 2 3))                    ; NoteEvent でない数値
     ((make-music 'RestEvent))    ; RestEvent を含む
   ))
+
+% テスト用のノートリスト
+#(set! test-note-list
+  (list
+    (expected-note-event 0 8 'normal)
+    (expected-note-event 2 8 'normal)
+    (expected-note-event 4 8 'normal)
+  ))
+
+
+% テスト用 articulation
+#(define test-articulation (make-music 'ArticulationEvent 'articulation-type 'accent))
+
+% テスト用のノートリスト
+#(define expected-articulation-note-list
+  (let* (
+      (base-list
+        (list
+          (expected-note-event 0 8 'normal)
+          (expected-note-event 2 8 'normal)
+          (expected-note-event 4 8 'normal))) ; 最後に articulation を追加したい要素
+      (last (car (reverse base-list)))
+      (rest (reverse (cdr (reverse base-list))))
+      (new-last
+        (ly:music-set-property! last 'articulations (list test-articulation)))
+    )
+    (append rest (list new-last))
+  )
+)
+
+% add-articulation-to-last のテスト
+#(test-ok
+    add-articulation-to-last
+    `(
+        ((,test-note-list ,test-articulation) . ,expected-articulation-note-list)
+    )
+)

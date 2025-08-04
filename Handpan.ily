@@ -166,6 +166,8 @@ SetTranslateTable =
 
 % 連桁のグループを作成する
 #(define (make-beam-group notes)
+  (unless (note-event-list? notes)
+    (error "make-beam-group: all elements must be NoteEvent music expressions:" notes))
   (make-music
     'SequentialMusic
     'elements
@@ -187,7 +189,7 @@ SetTranslateTable =
         (new-artics (append existing-artics (list articulation-music)))      ; 取得した articulations に追加したい内容を追加
         (new-last (ly:music-set-property! last 'articulations new-artics))   ; 最後の要素の articulations を上書き
       )
-      (append rest (list last)) ; 元のリストに復元
+      (append rest (list new-last)) ; 元のリストに復元
     )
   )
 )
