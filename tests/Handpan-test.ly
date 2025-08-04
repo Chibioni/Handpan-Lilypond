@@ -305,3 +305,51 @@
     (60 (4) normal)
   )
 )
+
+% note-event? のテスト
+#(test-ok
+  note-event?
+  `(
+    ((,(expected-note-event 0 4 'default)) . #t)
+    ((42) . #f)
+    (("note") . #f)
+    ((#f) . #f)
+    ((()) . #f)
+  )
+)
+
+% テスト用のノートリスト
+#(define test-note-list
+  (list
+    (expected-note-event 0 8 'normal)
+    (expected-note-event 2 8 'normal)
+    (expected-note-event 4 8 'normal)
+  ))
+
+% note-event-list? のテスト
+#(test-ok
+  note-event-list?
+  `(
+    ((,test-note-list) . #t)
+    ((,(list (expected-note-event 0 8 'normal) 99 "invalid")) . #f)
+    (((1 2 3)) . #f)
+    ((("A" "B")) . #f)
+    ((()) . #f)
+    ((#f) . #f)
+  )
+)
+
+#(test-ok
+    make-chord-group
+    `(
+        ((,test-note-list) . ,(make-music 'EventChord 'elements test-note-list))
+    )
+)
+
+#(test-error
+  make-chord-group
+  '(
+    ("not a list")               ; リストでない
+    ((1 2 3))                    ; NoteEvent でない数値
+    ((make-music 'RestEvent))    ; RestEvent を含む
+  ))

@@ -193,12 +193,28 @@ SetTranslateTable =
 )
 
 % 和音のグループを作成する
+% テスト書いた
 #(define (make-chord-group notes)
+  (unless (note-event-list? notes)
+    (error "make-chord-group: all elements must be NoteEvent music expressions:" notes))
   (make-music
     'EventChord
     'elements notes
   )
 )
+
+% ノートイベントなら true, それ以外なら false を返す
+% テスト書いた
+#(define (note-event? x)
+  (and (ly:music? x)
+       (eq? (ly:music-property x 'name) 'NoteEvent)))
+
+
+% ノートイベントのリストなら true, それ以外なら false を返す
+% テスト書いた
+#(define (note-event-list? lst)
+  (and (list? lst)
+       (every note-event? lst)))
 
 %小節線のチェック
 %テスト書いた
