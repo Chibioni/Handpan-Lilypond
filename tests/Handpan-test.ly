@@ -306,7 +306,7 @@
   )
 )
 
-% note-event? のテスト
+% note-event? の動作テスト
 #(test-ok
   note-event?
   `(
@@ -326,7 +326,7 @@
     (expected-note-event 4 8 'normal)
   ))
 
-% note-event-list? のテスト
+% note-event-list? の動作テスト
 #(test-ok
   note-event-list?
   `(
@@ -339,7 +339,7 @@
   )
 )
 
-% make-chord-group のテスト
+% make-chord-group 正常時のテスト
 #(test-ok
     make-chord-group
     `(
@@ -347,6 +347,7 @@
     )
 )
 
+% make-chord-group 異常な引数のテスト
 #(test-error
   make-chord-group
   '(
@@ -384,10 +385,72 @@
   )
 )
 
-% add-articulation-to-last のテスト
+% add-articulation-to-last 正常時のテスト
 #(test-ok
     add-articulation-to-last
     `(
         ((,test-note-list ,test-articulation) . ,expected-articulation-note-list)
     )
+)
+
+% add-articulation-to-last 異常な引数のテスト
+#(test-error
+  add-articulation-to-last
+  `(
+     ;; music-list が空
+     (() ,test-articulation)
+
+     ;; music-list に NoteEvent 以外が含まれる
+     ((1 2 3) ,test-articulation)
+     ((,(make-music 'RestEvent)) ,test-articulation)
+
+     ;; articulation-music が music ではない
+     (,test-note-list "not-a-music-object")
+     (,test-note-list 123)
+   )
+)
+
+% テスト用のノートリスト
+#(set! test-note-list
+  (list
+    (expected-note-event 0 8 'normal)
+    (expected-note-event 2 8 'normal)
+    (expected-note-event 4 8 'normal)
+  ))
+
+% beam-group テスト用 articulation
+#(set! test-articulation (make-music 'BeamEvent 'span-direction 1))
+
+% 想定される make-beam-group
+#(define expected-beam-group
+    (make-music
+        'SequentialMusic
+        'elements (append
+            (list (make-music 'BeamEvent 'span-direction -1))
+            expected-articulation-note-list
+        )
+    )
+)
+
+% make-beam-group 正常時のテスト
+#(test-ok
+    make-beam-group
+    `(
+        ((,test-note-list) . ,expected-beam-group)
+    )
+)
+
+% 異常な引数のテスト（make-beam-group）
+#(test-error
+  make-beam-group
+  `(
+    ;; 空リスト（空のノートリストは許容しない設計）
+    (())
+    ;; NoteEvent 以外を含むリスト（整数が混ざっている）
+    ((,(list (expected-note-event 0 8 'normal) 42 )))
+    ;; 全く関係ない型（整数）
+    (42)
+    ;; リストだが NoteEvent でない music オブジェクト（例えば RestEvent）
+    ((,(list (make-music 'RestEvent 'duration (ly:make-duration 2 0)) )))
+  )
 )

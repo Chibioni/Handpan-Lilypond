@@ -165,9 +165,8 @@ SetTranslateTable =
 
 
 % 連桁のグループを作成する
+% テスト書いた
 #(define (make-beam-group notes)
-  (unless (note-event-list? notes)
-    (error "make-beam-group: all elements must be NoteEvent music expressions:" notes))
   (make-music
     'SequentialMusic
     'elements
@@ -179,18 +178,20 @@ SetTranslateTable =
 )
 
 % リスト最後のlilypond要素に、articulationsを追加する
+% テスト書いた
 #(define (add-articulation-to-last music-list articulation-music)
-  (if (null? music-list)
-    (error "music-list is empty")
-    (let* (
-        (last (car (reverse music-list)))                                    ; 最後の要素を抽出
-        (rest (reverse (cdr (reverse music-list))))                          ; 最後以外の要素のリスト
-        (existing-artics (ly:music-property last 'articulations))            ; 最後の要素に既に設定されている articulations を取得
-        (new-artics (append existing-artics (list articulation-music)))      ; 取得した articulations に追加したい内容を追加
-        (new-last (ly:music-set-property! last 'articulations new-artics))   ; 最後の要素の articulations を上書き
-      )
-      (append rest (list new-last)) ; 元のリストに復元
+  (unless (note-event-list? music-list) ;; music-listのチェック
+    (error "add-articulation-to-last: music-list must be a non-empty list of NoteEvent music expressions"))
+  (unless (ly:music? articulation-music) ;; articulation-musicのチェック
+    (error "add-articulation-to-last: articulation-music must be a music expression"))
+  (let* (
+      (last (car (reverse music-list)))                                    ; 最後の要素を抽出
+      (rest (reverse (cdr (reverse music-list))))                          ; 最後以外の要素のリスト
+      (existing-artics (ly:music-property last 'articulations))            ; 最後の要素に既に設定されている articulations を取得
+      (new-artics (append existing-artics (list articulation-music)))      ; 取得した articulations に追加したい内容を追加
+      (new-last (ly:music-set-property! last 'articulations new-artics))   ; 最後の要素の articulations を上書き
     )
+    (append rest (list new-last)) ; 元のリストに復元
   )
 )
 
