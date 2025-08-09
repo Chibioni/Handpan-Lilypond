@@ -85,6 +85,7 @@ SetTranslateTable =
 
 
 % リストから見つけた記号に合わせた処理関数へ処理を移譲する
+% テスト書いた
 #(define (parse-token-list tokens)
   (let loop ((tokens tokens) (result '()))
     (cond 
@@ -136,6 +137,7 @@ SetTranslateTable =
 % tokens        : 楽譜用の記号を記述した文字列のリスト
 % end-token     : グループの終端を表す記号の文字列... "]", ">", ...
 % ignore-tokens : グループ内に存在してはならない記号のリスト
+% テスト書いた
 #(define (parse-block tokens end-token ignore-tokens)
   (let loop ((tokens tokens) (collected '()))
     (cond
@@ -151,7 +153,7 @@ SetTranslateTable =
       )
 
       ;; 禁止されたトークンを含んでいた場合 → エラー
-      ( (member (car tokens) ignore-tokens)
+      ( (member (car tokens) ignore-tokens equal?)
         (error (string-append "parse-block: 許可されていない記号 '" (car tokens) "' がブロック内に現れました"))
       )
 

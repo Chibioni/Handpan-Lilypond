@@ -29,6 +29,8 @@ FILES=(
     "make-custom-note-test.ly"
     "parse-left-element-test.ly"
     "parse-note-element-test.ly"
+    "parse-block-test.ly"
+    "parse-token-list-test.ly"
 )
 
 # 処理開始
