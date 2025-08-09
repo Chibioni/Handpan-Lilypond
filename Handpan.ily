@@ -19,6 +19,7 @@ SetTranslateTable =
 )
 
 % 与えられたスコア文字列（"6^2!-8 4-4 R-8"など）を LilyPond 音楽オブジェクトへ変換する
+% テスト書いた
 #(define (handpan-score-internal score-str)
   (if (not (string? score-str))
     (error "parse-score: 引数が文字列ではありません")
