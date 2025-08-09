@@ -217,6 +217,7 @@ SetTranslateTable =
 % テスト書いた
 #(define (note-event-list? lst)
   (and (list? lst)
+       (not (null? lst))
        (every note-event? lst)))
 
 %小節線のチェック
