@@ -26,6 +26,9 @@ FILES=(
     "make-chord-group-test.ly"
     "add-articulation-to-last-test.ly"
     "make-beam-group-test.ly"
+    "make-custom-note-test.ly"
+    "parse-left-element-test.ly"
+    "parse-note-element-test.ly"
 )
 
 # 処理開始

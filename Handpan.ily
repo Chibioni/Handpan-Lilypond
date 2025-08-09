@@ -227,6 +227,7 @@ SetTranslateTable =
 )
 
 % "12^2!-8" という音符を表す文字列から音符を作成する
+% テスト書いた
 #(define (parse-note-element element-str)
   (if (not (string? element-str)) 
     (error "element-str is not a string")
@@ -262,6 +263,7 @@ SetTranslateTable =
 
 % ここからそれぞれの音符用の処理を書く
 % 音符は make-custom-note 関数を用いる
+% テスト書いた
 #(define (parse-left-element note-str duration)
   (cond
     ((not (string? note-str))
@@ -371,6 +373,7 @@ SetTranslateTable =
 %   HANDPAN-TYPE-NORMAL : 通常の音符
 %   HANDPAN-TYPE-ACCENT : アクセント記号付き
 %   HANDPAN-TYPE-GHOST  : ゴースト・ノート
+% テスト書いた
 #(define (make-custom-note pitch duration head-style note-type)
   (let*
     (
