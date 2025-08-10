@@ -183,18 +183,38 @@ SetTranslateTable =
 % リスト最後のlilypond要素に、articulationsを追加する
 % テスト書いた
 #(define (add-articulation-to-last music-list articulation-music)
-  (unless (note-event-list? music-list) ;; music-listのチェック
-    (error "add-articulation-to-last: music-list must be a non-empty list of NoteEvent music expressions"))
+  (unless (playable-event-list? music-list) ;; music-listのチェック
+    (error "add-articulation-to-last: music-list must be a non-empty list of playable music expressions"))
   (unless (ly:music? articulation-music) ;; articulation-musicのチェック
     (error "add-articulation-to-last: articulation-music must be a music expression"))
+
+  ; 最後のNoteEventを見つける
   (let* (
-      (last (car (reverse music-list)))                                    ; 最後の要素を抽出
-      (rest (reverse (cdr (reverse music-list))))                          ; 最後以外の要素のリスト
-      (existing-artics (ly:music-property last 'articulations))            ; 最後の要素に既に設定されている articulations を取得
-      (new-artics (append existing-artics (list articulation-music)))      ; 取得した articulations に追加したい内容を追加
-      (new-last (ly:music-set-property! last 'articulations new-artics))   ; 最後の要素の articulations を上書き
+    (len (length music-list))
+    (last-note-and-idx ; (lastNoteEvent . index) のペア
+      (let loop ((rev-list (reverse music-list)) (idx (- len 1)))
+        (cond
+          ((null? rev-list) #f)
+          ((note-event? (car rev-list)) (cons (car rev-list) idx))
+          (else (loop (cdr rev-list) (- idx 1)))
+        )
+      ))
+    (last-note (if last-note-and-idx (car last-note-and-idx) #f)) ; lastNoteEvent or false
+    (idx (if last-note-and-idx (cdr last-note-and-idx) #f))       ; index         or false
+    ) 
+    (unless last-note ; last-note が存在しない場合、エラー
+      (error "add-articulation-to-last: no NoteEvent found in music-list"))
+    (let* (           ; last-note が存在したら、articulations に articulation-music を追加する
+        (existing-artics (ly:music-property last-note 'articulations))           ; 最後のNoteEventに既に設定されている articulations を取得
+        (new-artics (append existing-artics (list articulation-music)))          ; 取得した articulations に追加したい内容を追加
+        (new-last (ly:music-set-property! last-note 'articulations new-artics))  ; 最後のNoteEventの articulations を上書き
+      )
+      (append
+        (take music-list idx)
+        (list new-last)
+        (drop music-list (+ idx 1))
+      )
     )
-    (append rest (list new-last)) ; 元のリストに復元
   )
 )
 

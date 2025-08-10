@@ -17,20 +17,23 @@
     )
 )
 
-% add-articulation-to-last 異常な引数のテスト
+% add-articulation-to-last 異常時のテスト
 #(test-error
   add-articulation-to-last
   `(
      ;; music-list が空
      (() ,test-articulation)
 
-     ;; music-list に NoteEvent 以外が含まれる
+     ;; music-list が全てNoteEvent以外（ここでは全て休符など）
+     ((,(expected-rest-event 4)) ,test-articulation)
+     ((,(expected-skip-event 4)) ,test-articulation)
+     ((,(expected-bar-check)) ,test-articulation)
+
+     ;; music-list に playable ではない要素が含まれる
      ((1 2 3) ,test-articulation)
-     ((,(make-music 'RestEvent)) ,test-articulation)
 
      ;; articulation-music が music ではない
      (,test-note-list "not-a-music-object")
      (,test-note-list 123)
    )
 )
-
