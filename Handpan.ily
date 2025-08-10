@@ -216,12 +216,35 @@ SetTranslateTable =
        (eq? (ly:music-property x 'name) 'NoteEvent)))
 
 
+% バーチェックなら true, それ以外なら false を返す
+#(define (bar-check? x)
+  (and (ly:music? x)
+       (eq? (ly:music-property x 'name) 'BarCheck)))
+
+% 休符なら true, それ以外なら false を返す
+#(define (rest-event? x)
+  (and (ly:music? x)
+       (eq? (ly:music-property x 'name) 'RestEvent)))
+
+% 非表示休符なら true, それ以外なら false を返す
+#(define (skip-event? x)
+  (and (ly:music? x)
+       (eq? (ly:music-property x 'name) 'SkipEvent)))
+
+
 % ノートイベントのリストなら true, それ以外なら false を返す
 % テスト書いた
 #(define (note-event-list? lst)
   (and (list? lst)
        (not (null? lst))
        (every note-event? lst)))
+
+% ノートイベント、休符、非表示休符、バーチェックならtrue, それ以外なら false を返す
+#(define (playable-event? x)
+  (or (note-event? x)
+      (rest-event? x)
+      (skip-event? x)
+      (bar-check?  x)))
 
 %小節線のチェック
 %テスト書いた
