@@ -243,6 +243,7 @@ SetTranslateTable =
        (every note-event? lst)))
 
 % ノートイベント、休符、非表示休符、バーチェックならtrue, それ以外なら false を返す
+% テスト書いた
 #(define (playable-event? x)
   (or (note-event? x)
       (rest-event? x)
