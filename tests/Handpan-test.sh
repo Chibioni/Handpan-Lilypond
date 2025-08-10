@@ -34,6 +34,7 @@ FILES=(
     "handpan-score-internal-test.ly"
     "bar-check?-test.ly"
     "rest-event?-test.ly"
+    "skip-event?-test.ly"
 )
 
 # 処理開始

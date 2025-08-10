@@ -217,16 +217,19 @@ SetTranslateTable =
 
 
 % バーチェックなら true, それ以外なら false を返す
+% テスト書いた
 #(define (bar-check? x)
   (and (ly:music? x)
        (eq? (ly:music-property x 'name) 'BarCheck)))
 
 % 休符なら true, それ以外なら false を返す
+% テスト書いた
 #(define (rest-event? x)
   (and (ly:music? x)
        (eq? (ly:music-property x 'name) 'RestEvent)))
 
 % 非表示休符なら true, それ以外なら false を返す
+% テスト書いた
 #(define (skip-event? x)
   (and (ly:music? x)
        (eq? (ly:music-property x 'name) 'SkipEvent)))
