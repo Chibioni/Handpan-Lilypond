@@ -7,7 +7,7 @@
 \include "utils/expected-articulation-note-list.ily"
 
 % beam-group テスト用 articulation
-#(set! test-articulation (make-music 'BeamEvent 'span-direction 1))
+#(define test-articulation (make-music 'BeamEvent 'span-direction 1))
 
 % 想定される make-beam-group
 #(define expected-beam-group
@@ -15,7 +15,7 @@
         'SequentialMusic
         'elements (append
             (list (make-music 'BeamEvent 'span-direction -1))
-            expected-articulation-note-list
+            (expected-articulation-note-list test-articulation)
         )
     )
 )

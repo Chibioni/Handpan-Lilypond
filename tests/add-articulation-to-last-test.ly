@@ -7,13 +7,13 @@
 \include "utils/expected-articulation-note-list.ily"
 
 % テスト用 articulation
-#(set! test-articulation (make-music 'ArticulationEvent 'articulation-type 'accent))
+#(define test-articulation (make-music 'ArticulationEvent 'articulation-type 'accent))
 
 % add-articulation-to-last 正常時のテスト
 #(test-ok
     add-articulation-to-last
     `(
-        ((,test-note-list ,test-articulation) . ,expected-articulation-note-list)
+        ((,test-note-list ,test-articulation) . ,(expected-articulation-note-list test-articulation))
     )
 )
 
