@@ -47,3 +47,21 @@
     )
   )
 )
+
+% バーチェック(小節線)のテスト用オブジェクト
+#(define (expected-bar-check)
+  (make-music 'BarCheck))
+
+% 休符(RestEvent)のテスト用オブジェクト
+#(define (expected-rest-event duration)
+  ;; duration-log は 4分音符なら 2、8分音符なら 3 など
+  ;; dots は付点の数
+  (make-music 'RestEvent
+              'duration (make-test-duration duration))
+)
+
+% 非表示休符(SkipEvent)のテスト用オブジェクト
+#(define (expected-skip-event duration)
+  (make-music 'SkipEvent
+              'duration (make-test-duration duration))
+)

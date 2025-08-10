@@ -32,6 +32,7 @@ FILES=(
     "parse-block-test.ly"
     "parse-token-list-test.ly"
     "handpan-score-internal-test.ly"
+    "bar-check?-test.ly"
 )
 
 # 処理開始
