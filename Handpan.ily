@@ -346,6 +346,22 @@ SetTranslateTable =
       )
     )
 
+    ;; Ring
+    ((char=? (string-ref note-str 0) #\O)
+      (let* (
+          (rest-str (substring note-str 1)) ; "O0!" -> "0!"
+          (type-pair (parse-note-type rest-str))     ; "0!" -> ("0" . 'HANDPAN-TYPE-ACCENT)
+          (tone-num (string->number (car type-pair)))
+          (note-type (cdr type-pair))
+
+          (pitch (pitch-translate tone-num))    ; 変換後の五線譜音高
+          (head-style 'xcircle)
+        )
+        (make-custom-note pitch duration head-style note-type)
+      )
+    )
+
+
     ;; Rest
     ((char=? (string-ref note-str 0) #\R)
       (let (

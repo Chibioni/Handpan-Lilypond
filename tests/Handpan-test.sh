@@ -25,7 +25,6 @@ FILES=(
     "note-event-list?-test.ly"
     "make-chord-group-test.ly"
     "make-custom-note-test.ly"
-    "parse-left-element-test.ly"
     "parse-note-element-test.ly"
     "parse-block-test.ly"
     "parse-token-list-test.ly"
@@ -37,6 +36,7 @@ FILES=(
     "playable-event-list?-test.ly"
     "add-articulation-to-last-test.ly"
     "make-beam-group-test.ly"
+    "parse-left-element-test.ly"
 )
 
 # 処理開始

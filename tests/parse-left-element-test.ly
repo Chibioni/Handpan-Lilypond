@@ -23,6 +23,11 @@
       (("S12!"   8) . ,(make-custom-note 12  8 'cross 'HANDPAN-TYPE-ACCENT))
       (("S6."   16) . ,(make-custom-note  6 16 'cross 'HANDPAN-TYPE-GHOST))
 
+      ;; --- Apex ring (符頭 xcircle) ---
+      (("O4"     4) . ,(make-custom-note  4  4 'xcircle 'HANDPAN-TYPE-NORMAL))
+      (("O12!"   8) . ,(make-custom-note 12  8 'xcircle 'HANDPAN-TYPE-ACCENT))
+      (("O6."   16) . ,(make-custom-note  6 16 'xcircle 'HANDPAN-TYPE-GHOST))
+
       ;; --- Rest ---
       (("R" 4)      . ,(make-rest-note 4))
       (("R" 8)      . ,(make-rest-note 8))
@@ -62,6 +67,7 @@
     ;; pitch-translate で失敗（トーン番号がテーブルにない）
     ("99" 4)
     ("S99" 4)
+    ("O99" 4)
 
     ;; caret 番号が1,2以外
     ("12^3" 4)
