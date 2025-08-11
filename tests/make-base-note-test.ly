@@ -8,21 +8,24 @@
 #(test-ok
     make-base-note
     `(
-        (( 0 4 default) . ,(expected-note-event 0 4  'default))
-        (( 0 8 default) . ,(expected-note-event 0 8  'default))
-        ((10 4 default) . ,(expected-note-event 10 4 'default))
-        ((10 8 default) . ,(expected-note-event 10 8 'default))
+        (( 0 "4" default) . ,(expected-note-event  0 "4" 'default))
+        (( 0 "8" default) . ,(expected-note-event  0 "8" 'default))
+        ((10 "4" default) . ,(expected-note-event 10 "4" 'default))
+        ((10 "8" default) . ,(expected-note-event 10 "8" 'default))
 
-        (( 3  2 harmonic) . ,(expected-note-event  3  2 'harmonic))
-        (( 3 16 harmonic) . ,(expected-note-event  3 16 'harmonic))
-        ((-2  2 harmonic) . ,(expected-note-event -2  2 'harmonic))
-        ((-2 16 harmonic) . ,(expected-note-event -2 16 'harmonic))
+        (( 3  "2" harmonic) . ,(expected-note-event  3  "2" 'harmonic))
+        (( 3 "16" harmonic) . ,(expected-note-event  3 "16" 'harmonic))
+        ((-2  "2" harmonic) . ,(expected-note-event -2  "2" 'harmonic))
+        ((-2 "16" harmonic) . ,(expected-note-event -2 "16" 'harmonic))
 
-        (( 4  1 harmonic-black) . ,(expected-note-event  4  1 'harmonic-black))
-        (( 4 32 harmonic-black) . ,(expected-note-event  4 32 'harmonic-black))
-        ((15  1 harmonic-black) . ,(expected-note-event 15  1 'harmonic-black))
-        ((15 32 harmonic-black) . ,(expected-note-event 15 32 'harmonic-black))
+        (( 4  "1" harmonic-black) . ,(expected-note-event  4  "1" 'harmonic-black))
+        (( 4 "32" harmonic-black) . ,(expected-note-event  4 "32" 'harmonic-black))
+        ((15  "1" harmonic-black) . ,(expected-note-event 15  "1" 'harmonic-black))
+        ((15 "32" harmonic-black) . ,(expected-note-event 15 "32" 'harmonic-black))
 
+        ;; 付点のケースも追加
+        (( 0  "4." default)  . ,(expected-note-event  0  "4." 'default))
+        ((10 "8.." harmonic) . ,(expected-note-event 10 "8.." 'harmonic))
     )
 )
 
@@ -37,14 +40,14 @@
     (60 4 'normal 'extra)
 
     ;; pitch 異常
-    (#t 4 'normal)
-    ("C4" 4 'normal)
-    ((1 2) 4 'normal)
+    (#t "4" 'normal)
+    ("C4" "4" 'normal)
+    ((1 2) "4" 'normal)
 
     ;; head-style 異常
-    (60 4 "normal")
-    (60 4 #t)
-    (60 4 123)
+    (60 "4" "normal")
+    (60 "4" #t)
+    (60 "4" 123)
 
     ;; duration 異常
     (60 #t normal)

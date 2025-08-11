@@ -35,10 +35,10 @@
     ;; 空リスト（空のノートリストは許容しない設計）
     (())
     ;; NoteEvent 以外を含むリスト（整数が混ざっている）
-    ((,(list (expected-note-event 0 8 'normal) 42 )))
+    ((,(list (expected-note-event 0 "8" 'normal) 42 )))
     ;; 全く関係ない型（整数）
     (42)
     ;; リストだが NoteEvent でない music オブジェクト（例えば RestEvent）
-    ((,(list (make-music 'RestEvent 'duration (ly:make-duration 2 0)) )))
+    ((,(list (make-rest-note "8") )))
   )
 )

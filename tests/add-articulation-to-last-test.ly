@@ -25,8 +25,8 @@
      (() ,test-articulation)
 
      ;; music-list が全てNoteEvent以外（ここでは全て休符など）
-     ((,(expected-rest-event 4)) ,test-articulation)
-     ((,(expected-skip-event 4)) ,test-articulation)
+     ((,(expected-rest-event "4")) ,test-articulation)
+     ((,(expected-skip-event "4")) ,test-articulation)
      ((,(expected-bar-check)) ,test-articulation)
 
      ;; music-list に playable ではない要素が含まれる

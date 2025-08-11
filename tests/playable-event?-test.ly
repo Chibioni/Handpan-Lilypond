@@ -9,13 +9,13 @@
   playable-event?
   `(
     ;; NoteEvent → true
-    ((,(expected-note-event 0 4 'default)) . #t)
+    ((,(expected-note-event 0 "4" 'default)) . #t)
 
     ;; RestEvent → true
-    ((,(expected-rest-event 8)) . #t) ; 8分休符
+    ((,(expected-rest-event "8")) . #t) ; 8分休符
 
     ;; SkipEvent → true
-    ((,(expected-skip-event 8)) . #t) ; 8分の非表示休符
+    ((,(expected-skip-event "8")) . #t) ; 8分の非表示休符
 
     ;; BarCheck → true
     ((,(expected-bar-check)) . #t)

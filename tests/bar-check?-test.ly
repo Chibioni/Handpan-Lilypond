@@ -9,7 +9,7 @@
   bar-check?
   `(
     ((,(expected-bar-check)) . #t)
-    ((,(expected-note-event 0 4 'default)) . #f)
+    ((,(expected-note-event 0 "4" 'default)) . #f)
     ((42) . #f)
     (("bar") . #f)
     ((#f) . #f)

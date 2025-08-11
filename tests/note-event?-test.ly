@@ -8,7 +8,7 @@
 #(test-ok
   note-event?
   `(
-    ((,(expected-note-event 0 4 'default)) . #t)
+    ((,(expected-note-event 0 "4" 'default)) . #t)
     ((42) . #f)
     (("note") . #f)
     ((#f) . #f)

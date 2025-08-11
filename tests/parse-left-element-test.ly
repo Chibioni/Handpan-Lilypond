@@ -19,31 +19,31 @@
   parse-left-element
   `(
       ;; --- Slap (符頭 cross) ---
-      (("S4"     4) . ,(make-custom-note  4  4 'cross 'HANDPAN-TYPE-NORMAL))
-      (("S12!"   8) . ,(make-custom-note 12  8 'cross 'HANDPAN-TYPE-ACCENT))
-      (("S6."   16) . ,(make-custom-note  6 16 'cross 'HANDPAN-TYPE-GHOST))
+      (("S4"    "4") . ,(make-custom-note  4  "4" 'cross 'HANDPAN-TYPE-NORMAL))
+      (("S12!"  "8") . ,(make-custom-note 12  "8" 'cross 'HANDPAN-TYPE-ACCENT))
+      (("S6."  "16") . ,(make-custom-note  6 "16" 'cross 'HANDPAN-TYPE-GHOST))
 
       ;; --- Apex ring (符頭 xcircle) ---
-      (("O4"     4) . ,(make-custom-note  4  4 'xcircle 'HANDPAN-TYPE-NORMAL))
-      (("O12!"   8) . ,(make-custom-note 12  8 'xcircle 'HANDPAN-TYPE-ACCENT))
-      (("O6."   16) . ,(make-custom-note  6 16 'xcircle 'HANDPAN-TYPE-GHOST))
+      (("O4"    "4") . ,(make-custom-note  4  "4" 'xcircle 'HANDPAN-TYPE-NORMAL))
+      (("O12!"  "8") . ,(make-custom-note 12  "8" 'xcircle 'HANDPAN-TYPE-ACCENT))
+      (("O6."  "16") . ,(make-custom-note  6 "16" 'xcircle 'HANDPAN-TYPE-GHOST))
 
       ;; --- Rest ---
-      (("R" 4)      . ,(make-rest-note 4))
-      (("R" 8)      . ,(make-rest-note 8))
+      (("R" "4")      . ,(make-rest-note "4"))
+      (("R" "8")      . ,(make-rest-note "8"))
 
       ;; --- HideRest ---
-      (("H" 4)      . ,(make-hide-rest-note 4))
-      (("H" 16)     . ,(make-hide-rest-note 16))
+      (("H"  "4")      . ,(make-hide-rest-note "4"))
+      (("H" "16")     . ,(make-hide-rest-note "16"))
 
       ;; --- Tone field (通常) ---
-      (("4"     4) . ,(make-custom-note  4  4 'default 'HANDPAN-TYPE-NORMAL))
-      (("6!"    8) . ,(make-custom-note  6  8 'default 'HANDPAN-TYPE-ACCENT))
-      (("12."  16) . ,(make-custom-note 12 16 'default 'HANDPAN-TYPE-GHOST))
+      (("4"    "4") . ,(make-custom-note  4  "4" 'default 'HANDPAN-TYPE-NORMAL))
+      (("6!"   "8") . ,(make-custom-note  6  "8" 'default 'HANDPAN-TYPE-ACCENT))
+      (("12." "16") . ,(make-custom-note 12 "16" 'default 'HANDPAN-TYPE-GHOST))
 
       ;; --- Harmonics ---
-      (("12^1" 4)  . ,(make-custom-note 12 4 'harmonic       'HANDPAN-TYPE-NORMAL))
-      (("12^2" 8)  . ,(make-custom-note 12 8 'harmonic-black 'HANDPAN-TYPE-NORMAL))
+      (("12^1" "4")  . ,(make-custom-note 12 "4" 'harmonic       'HANDPAN-TYPE-NORMAL))
+      (("12^2" "8")  . ,(make-custom-note 12 "8" 'harmonic-black 'HANDPAN-TYPE-NORMAL))
   )
 )
 
@@ -55,8 +55,8 @@
   '(
     ;; 引数型不正
     (#t 4)                  ; note-str が文字列でない
-    ("4" #t)                ; duration が数値でない
-    ("4" "4")               ; duration が文字列
+    ("4" #t)                ; duration が文字列でない
+    ("4" 4)                 ; duration が数値
 
     ;; 空文字列
     ("" 4)

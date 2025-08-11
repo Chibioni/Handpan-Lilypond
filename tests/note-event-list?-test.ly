@@ -10,7 +10,7 @@
   note-event-list?
   `(
     ((,test-note-list) . #t)
-    ((,(list (expected-note-event 0 8 'normal) 99 "invalid")) . #f)
+    ((,(list (expected-note-event 0 "8" 'normal) 99 "invalid")) . #f)
     (((1 2 3)) . #f)
     ((("A" "B")) . #f)
     ((()) . #f)

@@ -18,19 +18,19 @@
 #(test-ok
   parse-note-element
   `(
-      (("4-4")     . ,(make-custom-note 4 4 'default 'HANDPAN-TYPE-NORMAL))
-      (("6-8")     . ,(make-custom-note 6 8 'default 'HANDPAN-TYPE-NORMAL))
+      (("4-4")     . ,(make-custom-note 4 "4" 'default 'HANDPAN-TYPE-NORMAL))
+      (("6-8")     . ,(make-custom-note 6 "8" 'default 'HANDPAN-TYPE-NORMAL))
 
-      (("12!-4")   . ,(make-custom-note 12 4 'default 'HANDPAN-TYPE-ACCENT))
-      (("4!-8")    . ,(make-custom-note 4 8 'default  'HANDPAN-TYPE-ACCENT))
+      (("12!-4")   . ,(make-custom-note 12 "4" 'default 'HANDPAN-TYPE-ACCENT))
+      (("4!-8")    . ,(make-custom-note  4 "8" 'default 'HANDPAN-TYPE-ACCENT))
 
-      (("6.-4")    . ,(make-custom-note 6 4 'default  'HANDPAN-TYPE-GHOST))
-      (("12.-8")   . ,(make-custom-note 12 8 'default 'HANDPAN-TYPE-GHOST))
+      (("6.-4")    . ,(make-custom-note  6 "4" 'default 'HANDPAN-TYPE-GHOST))
+      (("12.-8")   . ,(make-custom-note 12 "8" 'default 'HANDPAN-TYPE-GHOST))
 
-      (("12^1-4")  . ,(make-custom-note 12 4 'harmonic       'HANDPAN-TYPE-NORMAL))
-      (("12^2-8")  . ,(make-custom-note 12 8 'harmonic-black 'HANDPAN-TYPE-NORMAL))
-      (("R-4")     . ,(make-rest-note      4))
-      (("H-8")     . ,(make-hide-rest-note 8))
+      (("12^1-4")  . ,(make-custom-note 12 "4" 'harmonic       'HANDPAN-TYPE-NORMAL))
+      (("12^2-8")  . ,(make-custom-note 12 "8" 'harmonic-black 'HANDPAN-TYPE-NORMAL))
+      (("R-4")     . ,(make-rest-note      "4"))
+      (("H-8")     . ,(make-hide-rest-note "8"))
   )
 )
 

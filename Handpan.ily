@@ -290,7 +290,7 @@ SetTranslateTable =
     (let* (
         (tokens (split-element element-str))      ; -> ("4^2!" "4")
         (left (car tokens))                       ; "4^2!"
-        (duration (string->number (cadr tokens))) ; "4" → 4
+        (duration (cadr tokens))                  ; "4" → 4
         (note (parse-left-element left duration)) ; 音符オブジェクト
       )
       note
@@ -325,8 +325,8 @@ SetTranslateTable =
     ((not (string? note-str))
       (error "parse-left-element: 引数1が文字列ではありません"))
 
-    ((not (number? duration))
-      (error "parse-left-element: 引数2が数値ではありません"))
+    ((not (string? duration))
+      (error "parse-left-element: 引数2が文字列ではありません"))
 
     ((= (string-length note-str) 0)
       (error "parse-left-element: 空文字列"))
@@ -503,8 +503,8 @@ SetTranslateTable =
 %休符を作る
 %テスト書いた
 #(define (make-rest-note duration)
-  (if (not (integer? duration))
-      (error "make-rest-note: duration must be an integer" duration))
+  (if (not (string? duration))
+      (error "make-rest-note: duration must be an string" duration))
   (let* (
       (duration-obj (make-duration-obj duration))
       (rest-note 
@@ -521,8 +521,8 @@ SetTranslateTable =
 %非表示休符を作る
 %テスト書いた
 #(define (make-hide-rest-note duration)
-  (if (not (integer? duration))
-      (error "make-hide-rest-note: duration must be an integer" duration))
+  (if (not (string? duration))
+      (error "make-hide-rest-note: duration must be an string" duration))
   (let* (
       (duration-obj (make-duration-obj duration))
       (hide-rest-note 
@@ -539,15 +539,18 @@ SetTranslateTable =
 %lilypondのdurationオブジェクトを作成して返す
 %テスト書いた
 #(define (make-duration-obj duration)
-  ;; 整数チェック
-  (if (not (integer? duration))
-      (error "make-duration-obj: duration must be an integer" duration))
-  (let (
-      (duration-obj (ly:make-duration (inexact->exact (round (/ (log duration) (log 2)))) 0))
-    )
-    duration-obj
-  )
-)
+  ;; duration が必ず文字列かどうかをチェック
+  (unless (string? duration)
+    (error "make-duration-obj: duration must be a string" duration))
+
+  (let* ((dot-count (string-count duration #\.))
+         (num-part  (string->number (string-delete #\. duration))))
+    (unless (and (integer? num-part) (> num-part 0))
+      (error "make-duration-obj: invalid duration number" num-part))
+
+    (ly:make-duration
+      (inexact->exact (round (/ (log num-part) (log 2))))
+      dot-count)))
 
 % 文字列に"!"か"."が含まれていた時の処理を行い、記号までの文字列と音符の種類を返す
 % テスト書いた

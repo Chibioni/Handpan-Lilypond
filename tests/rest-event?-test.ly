@@ -8,8 +8,8 @@
 #(test-ok
   rest-event?
   `(
-    ((,(expected-rest-event 8)) . #t) ; 8分休符
-    ((,(expected-note-event 0 4 'default)) . #f)
+    ((,(expected-rest-event "8")) . #t) ; 8分休符
+    ((,(expected-note-event 0 "4" 'default)) . #f)
     ((42) . #f)
     (("rest") . #f)
     ((#f) . #f)
