@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# LilyPond 出力
+*.pdf
+*.midi
+*.log
+
+# Serena MCP
+.serena/cache/
+.serena/project.local.yml
+
+# macOS
+.DS_Store
