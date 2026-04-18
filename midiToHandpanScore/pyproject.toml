@@ -1,9 +1,20 @@
 [project]
 name = "miditohandpanscore"
 version = "0.1.0"
-description = "Add your description here"
+description = "MIDI to Handpan LilyPond score converter"
 readme = "README.md"
-requires-python = ">=3.14.4"
+requires-python = ">=3.12"
 dependencies = [
     "mido>=1.3.3",
 ]
+
+[project.scripts]
+handpan-generate-scales = "miditohandpanscore.generate_scales:main"
+handpan-midi-to-score = "miditohandpanscore.midi_to_score:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/miditohandpanscore"]

@@ -7,24 +7,30 @@ from dataclasses import dataclass
 
 @dataclass
 class HandpanScale:
-    scale_family: str       # スケール種別（例: "Kurd", "Low Pygmy"）
-    midi_notes: list[int]   # 実音の MIDI ノート番号リスト
-                            # インデックス = トーンフィールド番号
-                            # 0 = Ding（中央）、1〜 = 外周・ボトムトーンフィールド
-                            # 実音昇順で TF1 から付番する
-    key_signature: str      # LilyPond の調号指定文字列（例: "d \\minor", "f \\major"）
+    scale_family: str        # スケール種別（例: "Kurd", "Low Pygmy"）
+    note_names: list[str]    # 実音の音名リスト（例: ["D3", "A3", "Bb3", ...]）
+                             # インデックス = トーンフィールド番号
+                             # **note_names[0] は必ず Ding でなければならない**
+                             # （ピッチが最低音でなくてもよい。例: F Low Pygmy では Db3 より高い F3 が Ding）
+                             # TF1 以降は残りのノートを実音昇順で並べる
+    key_signature: str       # LilyPond の調号指定文字列（例: "d \\minor", "f \\major"）
+
+    @property
+    def midi_notes(self) -> list[int]:
+        # 音名リストから MIDI ノート番号リストを導出する
+        return [note(n) for n in self.note_names]
 
     @property
     def name(self) -> str:
         # 例: "D_Kurd9", "F_Low_Pygmy19"
         family = self.scale_family.replace(" ", "_")
-        return f"{ding_note_name(self.midi_notes[0])}_{family}{len(self.midi_notes)}"
+        return f"{ding_note_name(self.note_names[0])}_{family}{len(self.note_names)}"
 
     @property
     def ly_name(self) -> str:
         # LilyPond 識別子（例: "d_kurd9", "f_sharp_minor18", "b_flat_low_pygmy9"）
         family_slug = self.scale_family.lower().replace(" ", "_")
-        return f"{ding_ly_note_name(self.midi_notes[0])}_{family_slug}{len(self.midi_notes)}"
+        return f"{ding_ly_note_name(self.note_names[0])}_{family_slug}{len(self.note_names)}"
 
     @property
     def ly_pitches(self) -> list[int]:
@@ -56,10 +62,10 @@ class HandpanEnsemble:
     @property
     def name(self) -> str:
         # 例: "F_Sharp_Minor18"
-        ding = self.parts[0].scale.midi_notes[0]
-        total = sum(len(p.scale.midi_notes) for p in self.parts)
+        ding_name = self.parts[0].scale.note_names[0]
+        total = sum(len(p.scale.note_names) for p in self.parts)
         family = self.scale_family.replace(" ", "_")
-        return f"{ding_note_name(ding)}_{family}{total}"
+        return f"{ding_note_name(ding_name)}_{family}{total}"
 
     def part_ly_pitches(self, part_index: int) -> list[int]:
         # 全パートの MIDI ノートを統合した昇順リストを基準に N 値を導出する
@@ -98,45 +104,47 @@ def note(name: str) -> int:
     """音名文字列を MIDI ノート番号に変換。例: "D3"→50, "Bb3"→58, "C#4"→61"""
     # フォーマット: <幹音>[変音記号][オクターブ番号]
     # 幹音: A–G（大文字・小文字どちらも可）
-    # 変音記号: "#"（シャープ）または "b"（フラット）、省略可
+    # 変音記号:
+    #   "#"  = シャープ（+1半音）
+    #   "b"  = フラット（-1半音）
+    #   "##" または "x" = ダブルシャープ（+2半音）
+    #   "bb" = ダブルフラット（-2半音）
+    #   省略可
     # オクターブ番号: 整数（C4 = MIDI 60 を基準）
-    # 例: "D3", "Bb3", "C#4", "F#3", "Ab4"
+    # 例: "D3", "Bb3", "C#4", "F#3", "Ab4", "Cx4", "Dbb3"
 
-def notes(names: str) -> list[int]:
-    """スペース区切りの音名文字列を MIDI ノート番号リストに変換。"""
-    return [note(n) for n in names.split()]
 
-def ding_note_name(midi: int) -> str:
-    """Ding の MIDI ノート番号から大文字音名を返す。例: 50→"D", 66→"F_Sharp", 58→"B_Flat" """
-    # ding_ly_note_name() と同じ変換規則だが、先頭を大文字・区切りを "_" にする
+def ding_note_name(note_name: str) -> str:
+    """音名文字列（オクターブ付き）から大文字スケール名プレフィックスを返す。
+    例: "D3"→"D", "F#3"→"F_Sharp", "Bb3"→"B_Flat", "Cx4"→"C_Sharp_Sharp"
+    """
+    # ding_ly_note_name() の結果を先頭大文字・"_" 区切りに変換する
     # 例: "d" → "D"、"f_sharp" → "F_Sharp"、"b_flat" → "B_Flat"
 
-def ding_ly_note_name(midi: int) -> str:
-    """Ding の MIDI ノート番号から ly_name 用の小文字音名を返す。
-    シャープは _sharp、フラットは _flat サフィックスを付与する。
-    例: 50→"d", 66→"f_sharp", 58→"b_flat"
+def ding_ly_note_name(note_name: str) -> str:
+    """音名文字列（オクターブ付き）から ly_name 用の小文字音名を返す。
+    シャープは _sharp、フラットは _flat、ダブルは重ねて付与する。
+    例: "D3"→"d", "F#3"→"f_sharp", "Bb3"→"b_flat", "Cx4"→"c_sharp_sharp"
     """
     ...
 ```
 
 `ding_ly_note_name` の変換規則:
 
-| 音名 | 戻り値 |
-|------|--------|
-| C | `c` |
-| C# / Db | `c_sharp` / `d_flat` |
-| D | `d` |
-| D# / Eb | `d_sharp` / `e_flat` |
-| E | `e` |
-| F | `f` |
-| F# / Gb | `f_sharp` / `g_flat` |
-| G | `g` |
-| G# / Ab | `g_sharp` / `a_flat` |
-| A | `a` |
-| A# / Bb | `a_sharp` / `b_flat` |
-| B | `b` |
+幹音はそのまま小文字化し、変音記号を `_sharp` / `_flat` に変換して連結する。
 
-異名同音の選択は `note()` に渡した元の音名（`#` か `b`）に従う。
+| 入力例 | 戻り値 |
+|--------|--------|
+| `C3` | `c` |
+| `C#3` | `c_sharp` |
+| `Db3` | `d_flat` |
+| `D3` | `d` |
+| `Cx3`（ダブルシャープ） | `c_sharp_sharp` |
+| `Dbb3`（ダブルフラット） | `d_flat_flat` |
+| `F#3` | `f_sharp` |
+| `Bb3` | `b_flat` |
+
+異名同音の選択は `note_names` に格納された元の音名綴り（`#` か `b`）に従う。
 
 | 幹音 | C | D | E | F | G | A | B |
 |------|---|---|---|---|---|---|---|
@@ -155,7 +163,7 @@ def ding_ly_note_name(midi: int) -> str:
 SCALES: dict[str, HandpanScale] = {
     "d_kurd9": HandpanScale(
         scale_family="Kurd",
-        midi_notes=notes("D3 A3 Bb3 C4 D4 E4 F4 G4 A4"),
+        note_names=["D3", "A3", "Bb3", "C4", "D4", "E4", "F4", "G4", "A4"],
         key_signature="d \\minor",
     ),
 }
@@ -166,12 +174,12 @@ ENSEMBLES: dict[str, HandpanEnsemble] = {
         parts=[
             HandpanPart("Grand", HandpanScale(
                 scale_family="Grand",
-                midi_notes=notes("F#3 A3 C#4 E4 G#4 B4 D5 F#5 A5"),
+                note_names=["F#3", "A3", "C#4", "E4", "G#4", "B4", "D5", "F#5", "A5"],
                 key_signature="fis \\minor",
             )),
             HandpanPart("Leon", HandpanScale(
                 scale_family="Leon",
-                midi_notes=notes("G#3 B3 D4 F#4 A4 C#5 E5 G#5 B5"),
+                note_names=["G#3", "B3", "D4", "F#4", "A4", "C#5", "E5", "G#5", "B5"],
                 key_signature="fis \\minor",
             )),
         ],
