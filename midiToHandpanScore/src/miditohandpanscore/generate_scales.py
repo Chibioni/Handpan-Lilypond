@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .models import HandpanScale, HandpanEnsemble
+from .models import HandpanScale, HandpanSet
 from .scales.data import SCALES, ENSEMBLES
 
 _COLS = 3
@@ -32,7 +32,7 @@ def generate_scale_ly(scale: HandpanScale) -> str:
     )
 
 
-def generate_ensemble_ly(ensemble: HandpanEnsemble) -> str:
+def generate_ensemble_ly(ensemble: HandpanSet) -> str:
     lines = [
         '\\version "2.24.4"\n',
         f"% {ensemble.name} アンサンブル定義",

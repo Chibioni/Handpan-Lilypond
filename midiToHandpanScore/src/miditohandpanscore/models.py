@@ -49,7 +49,7 @@ class HandpanPart:
 
 
 @dataclass
-class HandpanEnsemble:
+class HandpanSet:
     scale_family: str
     parts: list[HandpanPart]
     key_signature: str

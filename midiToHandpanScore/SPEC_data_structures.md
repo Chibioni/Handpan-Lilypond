@@ -18,19 +18,19 @@ class HandpanScale:
     @property
     def midi_notes(self) -> list[int]:
         # 音名リストから MIDI ノート番号リストを導出する
-        return [note(n) for n in self.note_names]
+        return [note_name_to_midi(n) for n in self.note_names]
 
     @property
     def name(self) -> str:
         # 例: "D_Kurd9", "F_Low_Pygmy19"
         family = self.scale_family.replace(" ", "_")
-        return f"{ding_note_name(self.note_names[0])}_{family}{len(self.note_names)}"
+        return f"{note_name_to_scale_identifier(self.note_names[0])}_{family}{len(self.note_names)}"
 
     @property
     def ly_name(self) -> str:
         # LilyPond 識別子（例: "d_kurd9", "f_sharp_minor18", "b_flat_low_pygmy9"）
         family_slug = self.scale_family.lower().replace(" ", "_")
-        return f"{ding_ly_note_name(self.note_names[0])}_{family_slug}{len(self.note_names)}"
+        return f"{note_name_to_scale_identifier(self.note_names[0]).lower()}_{family_slug}{len(self.note_names)}"
 
     @property
     def ly_pitches(self) -> list[int]:
@@ -43,9 +43,9 @@ class HandpanScale:
 
 ---
 
-## `HandpanPart` / `HandpanEnsemble`
+## `HandpanPart` / `HandpanSet`
 
-複数のハンドパンで1つのスケールをカバーするアンサンブル定義。
+1人の奏者が複数台のハンドパンを同時に演奏するセット定義。
 
 ```python
 @dataclass
@@ -54,7 +54,7 @@ class HandpanPart:
     scale: HandpanScale
 
 @dataclass
-class HandpanEnsemble:
+class HandpanSet:
     scale_family: str         # 例: "Minor"
     parts: list[HandpanPart]  # パートリスト（順序 = MIDI重複時の優先順位）
     key_signature: str
@@ -65,7 +65,7 @@ class HandpanEnsemble:
         ding_name = self.parts[0].scale.note_names[0]
         total = sum(len(p.scale.note_names) for p in self.parts)
         family = self.scale_family.replace(" ", "_")
-        return f"{ding_note_name(ding_name)}_{family}{total}"
+        return f"{note_name_to_scale_identifier(ding_name)}_{family}{total}"
 
     def part_ly_pitches(self, part_index: int) -> list[int]:
         # 全パートの MIDI ノートを統合した昇順リストを基準に N 値を導出する
@@ -80,7 +80,7 @@ class HandpanEnsemble:
         return [n_map[m] for m in self.parts[part_index].scale.midi_notes]
 ```
 
-出力ファイル名は `{HandpanEnsemble.name}.ly`（例: `F_Sharp_Minor18.ly`）とする。
+出力ファイル名は `{HandpanSet.name}.ly`（例: `F_Sharp_Minor18.ly`）とする。
 
 ---
 
@@ -100,8 +100,10 @@ class MidiNoteEvent:
 ## ヘルパー関数
 
 ```python
-def note(name: str) -> int:
-    """音名文字列を MIDI ノート番号に変換。例: "D3"→50, "Bb3"→58, "C#4"→61"""
+def note_name_to_midi(name: str) -> int:
+    """音名文字列を MIDI ノート番号に変換。例: "D3"→50, "Bb3"→58, "C#4"→61
+    有効範囲は 0–127。範囲外は ValueError を送出する。
+    """
     # フォーマット: <幹音>[変音記号][オクターブ番号]
     # 幹音: A–G（大文字・小文字どちらも可）
     # 変音記号:
@@ -114,35 +116,29 @@ def note(name: str) -> int:
     # 例: "D3", "Bb3", "C#4", "F#3", "Ab4", "Cx4", "Dbb3"
 
 
-def ding_note_name(note_name: str) -> str:
-    """音名文字列（オクターブ付き）から大文字スケール名プレフィックスを返す。
+def note_name_to_scale_identifier(note_name: str) -> str:
+    """音名文字列（オクターブ付き）からスケール識別子用プレフィックスを返す。
     例: "D3"→"D", "F#3"→"F_Sharp", "Bb3"→"B_Flat", "Cx4"→"C_Sharp_Sharp"
-    """
-    # ding_ly_note_name() の結果を先頭大文字・"_" 区切りに変換する
-    # 例: "d" → "D"、"f_sharp" → "F_Sharp"、"b_flat" → "B_Flat"
-
-def ding_ly_note_name(note_name: str) -> str:
-    """音名文字列（オクターブ付き）から ly_name 用の小文字音名を返す。
-    シャープは _sharp、フラットは _flat、ダブルは重ねて付与する。
-    例: "D3"→"d", "F#3"→"f_sharp", "Bb3"→"b_flat", "Cx4"→"c_sharp_sharp"
+    LilyPond 識別子（小文字）が必要な場合は .lower() を呼ぶ。
+    例: "F#3" → "F_Sharp".lower() → "f_sharp"
     """
     ...
 ```
 
-`ding_ly_note_name` の変換規則:
+`note_name_to_scale_identifier` の変換規則:
 
 幹音はそのまま小文字化し、変音記号を `_sharp` / `_flat` に変換して連結する。
 
 | 入力例 | 戻り値 |
 |--------|--------|
-| `C3` | `c` |
-| `C#3` | `c_sharp` |
-| `Db3` | `d_flat` |
-| `D3` | `d` |
-| `Cx3`（ダブルシャープ） | `c_sharp_sharp` |
-| `Dbb3`（ダブルフラット） | `d_flat_flat` |
-| `F#3` | `f_sharp` |
-| `Bb3` | `b_flat` |
+| `C3` | `C` |
+| `C#3` | `C_Sharp` |
+| `Db3` | `D_Flat` |
+| `D3` | `D` |
+| `Cx3`（ダブルシャープ） | `C_Sharp_Sharp` |
+| `Dbb3`（ダブルフラット） | `D_Flat_Flat` |
+| `F#3` | `F_Sharp` |
+| `Bb3` | `B_Flat` |
 
 異名同音の選択は `note_names` に格納された元の音名綴り（`#` か `b`）に従う。
 
@@ -168,8 +164,8 @@ SCALES: dict[str, HandpanScale] = {
     ),
 }
 
-ENSEMBLES: dict[str, HandpanEnsemble] = {
-    "f_sharp_minor18": HandpanEnsemble(
+ENSEMBLES: dict[str, HandpanSet] = {
+    "f_sharp_minor18": HandpanSet(
         scale_family="Minor",
         parts=[
             HandpanPart("Grand", HandpanScale(

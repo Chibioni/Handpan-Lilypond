@@ -1,5 +1,5 @@
 import pytest
-from miditohandpanscore.models import compute_ly_pitches, HandpanScale, HandpanPart, HandpanEnsemble
+from miditohandpanscore.models import compute_ly_pitches, HandpanScale, HandpanPart, HandpanSet
 
 
 # D3=50, A3=57, Bb3=58, C4=60, D4=62, E4=64, F4=65, G4=67, A4=69
@@ -70,12 +70,12 @@ class TestHandpanScale:
         assert scale.ly_name == "d_celtic_minor9"
 
 
-class TestHandpanEnsemble:
+class TestHandpanSet:
     @pytest.fixture
     def ensemble(self):
         scale_a = HandpanScale("Kurd", ["D4", "A4", "Bb4", "C5", "D5"], "2b")
         scale_b = HandpanScale("Kurd", ["A3", "E4", "F4", "G4", "A4"], "2b")
-        return HandpanEnsemble(
+        return HandpanSet(
             scale_family="Kurd",
             parts=[HandpanPart("Player 1", scale_a), HandpanPart("Player 2", scale_b)],
             key_signature="2b",

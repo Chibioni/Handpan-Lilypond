@@ -1,6 +1,6 @@
 """Scale and ensemble definitions."""
 
-from ..models import HandpanScale, HandpanPart, HandpanEnsemble
+from ..models import HandpanScale, HandpanPart, HandpanSet
 
 SCALES: dict[str, HandpanScale] = {
     "d_kurd9": HandpanScale(
@@ -10,8 +10,8 @@ SCALES: dict[str, HandpanScale] = {
     ),
 }
 
-ENSEMBLES: dict[str, HandpanEnsemble] = {
-    "f_sharp_minor18": HandpanEnsemble(
+ENSEMBLES: dict[str, HandpanSet] = {
+    "f_sharp_minor18": HandpanSet(
         scale_family="Minor",
         parts=[
             HandpanPart("Grand", HandpanScale(
