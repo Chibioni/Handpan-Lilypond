@@ -1,7 +1,7 @@
 """Data model definitions."""
 
 from dataclasses import dataclass
-from .helpers import note, ding_note_name, ding_ly_note_name
+from .helpers import note_name_to_midi, note_name_to_scale_identifier
 
 
 def compute_ly_pitches(midi_notes: list[int]) -> list[int]:
@@ -25,17 +25,17 @@ class HandpanScale:
 
     @property
     def midi_notes(self) -> list[int]:
-        return [note(n) for n in self.note_names]
+        return [note_name_to_midi(n) for n in self.note_names]
 
     @property
     def name(self) -> str:
         family = self.scale_family.replace(" ", "_")
-        return f"{ding_note_name(self.note_names[0])}_{family}{len(self.note_names)}"
+        return f"{note_name_to_scale_identifier(self.note_names[0])}_{family}{len(self.note_names)}"
 
     @property
     def ly_name(self) -> str:
         family_slug = self.scale_family.lower().replace(" ", "_")
-        return f"{ding_ly_note_name(self.note_names[0])}_{family_slug}{len(self.note_names)}"
+        return f"{note_name_to_scale_identifier(self.note_names[0]).lower()}_{family_slug}{len(self.note_names)}"
 
     @property
     def ly_pitches(self) -> list[int]:
@@ -59,7 +59,7 @@ class HandpanEnsemble:
         ding_name = self.parts[0].scale.note_names[0]
         total = sum(len(p.scale.note_names) for p in self.parts)
         family = self.scale_family.replace(" ", "_")
-        return f"{ding_note_name(ding_name)}_{family}{total}"
+        return f"{note_name_to_scale_identifier(ding_name)}_{family}{total}"
 
     def part_ly_pitches(self, part_index: int) -> list[int]:
         all_midis = sorted(set(m for p in self.parts for m in p.scale.midi_notes))

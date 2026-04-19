@@ -43,37 +43,32 @@ def _parse_note_name(name: str) -> tuple[str, int, int]:
     return stem, accidental, octave
 
 
-def note(name: str) -> int:
+def note_name_to_midi(name: str) -> int:
     """音名文字列を MIDI ノート番号に変換。
 
     例: "D3"→50, "Bb3"→58, "C#4"→61, "Cx4"→62, "Dbb3"→48
+    有効範囲は 0〜127（MIDI 規格）。範囲外は ValueError を送出する。
     """
     stem, accidental, octave = _parse_note_name(name)
-    return (octave + 1) * 12 + _NATURAL_SEMITONES[stem] + accidental
+    midi = (octave + 1) * 12 + _NATURAL_SEMITONES[stem] + accidental
+    if not (0 <= midi <= 127):
+        raise ValueError(f"MIDI note number out of range (0–127): {midi!r} from {name!r}")
+    return midi
 
 
-def ding_ly_note_name(note_name: str) -> str:
-    """音名文字列（オクターブ付き）から ly_name 用の小文字音名を返す。
-
-    例: "D3"→"d", "F#3"→"f_sharp", "Bb3"→"b_flat", "Cx4"→"c_sharp_sharp"
-    """
-    stem, accidental, _ = _parse_note_name(note_name)
-    parts = [stem.lower()]
-    if accidental == 1:
-        parts.append("sharp")
-    elif accidental == -1:
-        parts.append("flat")
-    elif accidental == 2:
-        parts += ["sharp", "sharp"]
-    elif accidental == -2:
-        parts += ["flat", "flat"]
-    return "_".join(parts)
-
-
-def ding_note_name(note_name: str) -> str:
-    """音名文字列（オクターブ付き）から大文字スケール名プレフィックスを返す。
+def note_name_to_scale_identifier(note_name: str) -> str:
+    """音名文字列（オクターブ付き）からスケール識別子用プレフィックスを返す。
 
     例: "D3"→"D", "F#3"→"F_Sharp", "Bb3"→"B_Flat", "Cx4"→"C_Sharp_Sharp"
     """
-    ly = ding_ly_note_name(note_name)
-    return "_".join(part.capitalize() for part in ly.split("_"))
+    stem, accidental, _ = _parse_note_name(note_name)
+    parts = [stem]
+    if accidental == 1:
+        parts.append("Sharp")
+    elif accidental == -1:
+        parts.append("Flat")
+    elif accidental == 2:
+        parts += ["Sharp", "Sharp"]
+    elif accidental == -2:
+        parts += ["Flat", "Flat"]
+    return "_".join(parts)
