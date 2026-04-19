@@ -10,7 +10,7 @@ SCALES: dict[str, HandpanScale] = {
     ),
 }
 
-ENSEMBLES: dict[str, HandpanSet] = {
+SETS: dict[str, HandpanSet] = {
     "f_sharp_minor18": HandpanSet(
         scale_family="Minor",
         parts=[

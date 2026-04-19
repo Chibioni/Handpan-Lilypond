@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from .models import HandpanScale, HandpanSet
-from .scales.data import SCALES, ENSEMBLES
+from .scales.data import SCALES, SETS
 
 _COLS = 3
 
@@ -32,18 +32,18 @@ def generate_scale_ly(scale: HandpanScale) -> str:
     )
 
 
-def generate_ensemble_ly(ensemble: HandpanSet) -> str:
+def generate_set_ly(handpan_set: HandpanSet) -> str:
     lines = [
         '\\version "2.24.4"\n',
-        f"% {ensemble.name} アンサンブル定義",
+        f"% {handpan_set.name} セット定義",
     ]
-    for i, part in enumerate(ensemble.parts):
-        pitches = ensemble.part_ly_pitches(i)
+    for i, part in enumerate(handpan_set.parts):
+        pitches = handpan_set.part_ly_pitches(i)
         pairs = list(enumerate(pitches))
         lines.append(f"#(define {part.instrument_name} '(")
         lines.append(_format_pairs(pairs))
         lines.append("))")
-    lines.append(f'#(define {ensemble.name}-key-signature "{ensemble.key_signature}")\n')
+    lines.append(f'#(define {handpan_set.name}-key-signature "{handpan_set.key_signature}")\n')
     return "\n".join(lines)
 
 
@@ -61,7 +61,7 @@ def main() -> None:
         key = args.scale
         if key in SCALES:
             targets.append(("scale", key))
-        elif key in ENSEMBLES:
+        elif key in SETS:
             targets.append(("ensemble", key))
         else:
             print(f"[ERROR] Scale not found: {key}", file=sys.stderr)
@@ -69,7 +69,7 @@ def main() -> None:
     else:
         for key in SCALES:
             targets.append(("scale", key))
-        for key in ENSEMBLES:
+        for key in SETS:
             targets.append(("ensemble", key))
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -80,9 +80,9 @@ def main() -> None:
             content = generate_scale_ly(scale)
             out_path = output_dir / f"{scale.name}.ly"
         else:
-            ensemble = ENSEMBLES[key]
-            content = generate_ensemble_ly(ensemble)
-            out_path = output_dir / f"{ensemble.name}.ly"
+            handpan_set = SETS[key]
+            content = generate_set_ly(handpan_set)
+            out_path = output_dir / f"{handpan_set.name}.ly"
 
         out_path.write_text(content, encoding="utf-8")
         print(f"[INFO] Generated: {out_path}", file=sys.stderr)
