@@ -381,7 +381,7 @@ def events_to_tokens(
             上昇した短6度・短7度をナチュラルマイナーの音へ丸める。
 
     Returns:
-        ハンドパン記法トークンのリスト（例: ["1-4", "\\|", "< 2-8 3-8 >"]）。
+        ハンドパン記法トークンのリスト（例: ["1-4", "|", "< 2-8 3-8 >"]）。
     """
     _validate_min_duration(min_duration)
 
@@ -397,7 +397,7 @@ def events_to_tokens(
 
     for tick_start in sorted_ticks:
         while tick_start >= next_tick:
-            tokens.append("\\|")
+            tokens.append("|")
             next_tick = next(generator)
 
         technique, real_notes = _split_markers(groups[tick_start])
@@ -464,7 +464,7 @@ def events_to_tokens_per_part(
     for tick_start in sorted_ticks:
         while tick_start >= next_tick:
             for part_token_list in part_tokens:
-                part_token_list.append("\\|")
+                part_token_list.append("|")
             next_tick = next(generator)
 
         technique, real_notes = _split_markers(groups[tick_start])
@@ -531,7 +531,7 @@ def _split_chunks(tokens: list[Token], bars_per_chunk: int) -> list[list[Token]]
     bar_count = 0
 
     for token in tokens:
-        if token == "\\|":
+        if token == "|":
             bar_count += 1
             if bar_count % bars_per_chunk == 0:
                 if current:
@@ -554,7 +554,7 @@ def _ly_preamble(title: str, scale_name: str, key_sig: str) -> str:
     Args:
         title: 楽譜タイトル。
         scale_name: スケール定義ファイル名（拡張子なし）。
-        key_sig: LilyPond の調号文字列（例: "d \\minor"）。
+        key_sig: 調号文字列（例: "d minor"）。スペース区切りで "tonic mode"。
 
     Returns:
         LilyPond ヘッダー文字列。
@@ -569,7 +569,7 @@ def _ly_preamble(title: str, scale_name: str, key_sig: str) -> str:
         "  }\n"
         "  \\new Staff {\n"
         "    \\clef treble\n"
-        f"    \\key {key_sig}\n"
+        f"    \\key {key_sig.replace(' ', ' \\')}\n"
     )
 
 
