@@ -13,8 +13,18 @@ Handpan-Lilypond/
 │   │   ├── utility-functions.ily
 │   │   └── expected-articulation-note-list.ily
 │   └── *-test.ly            # 各関数ごとのテストファイル（28個）
-├── midiToHandpanScore/      # Python サブプロジェクト（開発中）
-│   ├── main.py
+├── midiToHandpanScore/      # Python サブプロジェクト（MIDI → ハンドパン記法変換）
+│   ├── src/miditohandpanscore/
+│   │   ├── midi_to_score.py     # CLI: handpan-midi-to-score
+│   │   ├── generate_scales.py   # CLI: handpan-generate-scales
+│   │   ├── score_generator.py   # MidiData → トークン → .ly 生成
+│   │   ├── midi_processing.py   # MIDI 読み込み・パース
+│   │   ├── models.py            # HandpanScale / HandpanPart / HandpanSet / MidiNoteEvent
+│   │   ├── quantize.py          # 音価量子化
+│   │   ├── helpers.py           # ノート名→MIDI 変換等ユーティリティ
+│   │   └── scales/
+│   │       ├── __init__.py
+│   │       └── data.py          # SCALES / SETS 定義辞書
 │   ├── pyproject.toml
 │   └── uv.lock
 ├── README.md                # 記法リファレンス（日本語）

@@ -21,8 +21,16 @@ PDF と MIDI が生成される。
 
 ## Python サブプロジェクト（midiToHandpanScore）
 ```bash
+# MIDI → ハンドパン楽譜 (.ly) に変換
 cd /Users/chibioni/Github/Handpan-Lilypond/midiToHandpanScore
-uv run python main.py
+uv run handpan-midi-to-score input.mid --scale d_kurd9
+uv run handpan-midi-to-score input.mid --ensemble f_sharp_minor18
+
+# スケール定義 .ly ファイルを生成
+uv run handpan-generate-scales
+
+# テスト実行
+uv run pytest
 ```
 
 ## Git

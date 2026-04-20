@@ -44,4 +44,8 @@
 ## Python (midiToHandpanScore)
 
 - Python 3.14+、uv でパッケージ管理
-- コードスタイル: まだ初期段階のため未確立
+- 型ヒント必須（`TypeAlias`、`NamedTuple`、`dataclass(frozen=True)` を積極活用）
+- 関数名: `snake_case`、クラス名: `PascalCase`
+- `NamedTuple` を値オブジェクトに多用（`MidiNoteEvent`、`ScaleLookup`、`ResolvedNote` 等）
+- `dataclass(frozen=True)` をドメインモデルに使用（`HandpanScale`、`HandpanSet`、`HandpanPart`）
+- エラー時は `print("[ERROR] ...", file=sys.stderr)` → `sys.exit(1)`、警告は `[WARN]`

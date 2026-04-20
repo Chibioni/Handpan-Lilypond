@@ -4,6 +4,15 @@
 
 > ハンドパンという楽器の構造・スケール・このプロジェクトの記譜法については [HANDPAN_SPEC.md](HANDPAN_SPEC.md) を参照すること。
 
+## セッション開始時の準備（「準備して」と言われたら実行）
+
+以下を順に実行してプロジェクトの状態を把握する。
+
+1. Serena プロジェクトを有効化: `mcp__plugin_serena_serena__activate_project("Handpan-Lilypond")`
+2. Serena の主要メモリを読む: `codebase_structure` / `project_overview` / `suggested_commands`
+3. `git log --oneline -5` で最近のコミットを確認
+4. 把握した内容を簡潔に要約してユーザーに伝える
+
 ## プロジェクト構成
 
 ```
@@ -16,7 +25,43 @@ tests/               # テストスイート
   utils/             # テスト用ユーティリティ
   test-functions.ily # test-ok / test-error / value-test ヘルパー
 midiToHandpanScore/  # MIDI → ハンドパン記法変換ツール（Python）
+  src/miditohandpanscore/
+    midi_to_score.py     # CLI エントリポイント: handpan-midi-to-score
+    generate_scales.py   # CLI エントリポイント: handpan-generate-scales
+    score_generator.py   # MidiData → トークン → LilyPond 文字列生成
+    midi_processing.py   # MIDI ファイル読み込み・パース
+    models.py            # HandpanScale / HandpanPart / HandpanSet / MidiNoteEvent
+    quantize.py          # 音価量子化（beats → DurationStr）
+    helpers.py           # ノート名→MIDI 変換等ユーティリティ
+    scales/data.py       # SCALES / SETS 定義辞書
 ```
+
+### midiToHandpanScore CLI の使い方
+
+```bash
+cd midiToHandpanScore
+
+# MIDI → ハンドパン楽譜 (.ly) に変換
+uv run handpan-midi-to-score input.mid --scale d_kurd9
+uv run handpan-midi-to-score input.mid --ensemble f_sharp_minor18
+
+# スケール定義 .ly ファイルを Scales/ に生成
+uv run handpan-generate-scales
+
+# テスト実行
+uv run pytest
+```
+
+### 主要クラス（midiToHandpanScore）
+
+| クラス | 役割 |
+|--------|------|
+| `HandpanScale` | スケール定義（note_names → midi_notes / ly_pitches を導出） |
+| `HandpanPart` | 1台のハンドパン（instrument_name + HandpanScale） |
+| `HandpanSet` | 複数台セット（HandpanPart のリスト） |
+| `MidiNoteEvent` | MIDI イベント（midi_note / tick_start / tick_end / velocity） |
+| `SCALES` | 登録済み単体スケール辞書（`scales/data.py`） |
+| `SETS` | 登録済みセット辞書（`scales/data.py`） |
 
 ## テストの実行
 
@@ -57,34 +102,6 @@ LilyPond 2.24.4 が必要。各テストファイルは `lilypond` コマンド�
 | `< ... >` | 和音 |
 | `[ ... ]` | 連桁グループ |
 | `\|` | 小節線チェック |
-
-## ドキュメント調査に Context7 を使う
-
-LilyPond・Python・Scheme の仕様を調べる際は、Context7 MCP を積極的に利用する。
-Web 検索より正確で最新のドキュメントを取得できる。
-
-### 手順
-
-1. `resolve-library-id` で対象ライブラリの ID を取得する
-2. `get-library-docs` でドキュメントを取得する
-
-### 利用例
-
-```
-# LilyPond の ly:make-pitch を調べる
-resolve-library-id: "lilypond"
-get-library-docs: <取得した ID>, topic="ly:make-pitch"
-
-# Python mido ライブラリを調べる
-resolve-library-id: "mido"
-get-library-docs: <取得した ID>, topic="MidiFile ticks_per_beat"
-
-# Guile Scheme の文字列関数を調べる
-resolve-library-id: "guile"
-get-library-docs: <取得した ID>, topic="string-tokenize"
-```
-
----
 
 ## 新しいスケールの追加
 

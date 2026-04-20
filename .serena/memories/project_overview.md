@@ -5,9 +5,10 @@ LilyPond ライブラリ。ハンドパン専用の独自記法文字列（例: 
 
 ## Tech Stack
 - **LilyPond 2.24.4** + 組み込み **Scheme (Guile)**: メインライブラリ
-- **Python 3.14+ / uv**: `midiToHandpanScore/` サブプロジェクト（MIDI → ハンドパン記法変換、開発初期段階）
+- **Python 3.14+ / uv**: `midiToHandpanScore/` サブプロジェクト（MIDI → ハンドパン記法変換）
 - **mido**: MIDI 読み込みライブラリ
 
 ## Entry Points
 - LilyPond ライブラリとして使用: `.ly` ファイルで `\include "Handpan.ily"` → `\SetTranslateTable` → `\HandpanScore "..."` 
-- MIDI 変換ツール: `cd midiToHandpanScore && uv run python main.py`
+- MIDI → 楽譜変換: `cd midiToHandpanScore && uv run handpan-midi-to-score input.mid --scale d_kurd9`
+- スケール定義ファイル生成: `cd midiToHandpanScore && uv run handpan-generate-scales`
