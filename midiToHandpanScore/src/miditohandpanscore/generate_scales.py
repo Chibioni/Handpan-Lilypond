@@ -47,12 +47,14 @@ def generate_set_ly(handpan_set: HandpanSet) -> str:
     return "\n".join(lines)
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="handpan-generate-scales")
     parser.add_argument("--scale", metavar="SCALE_NAME", help="生成するスケール名")
     parser.add_argument("--output-dir", metavar="DIR", default="../Scales", help="出力先ディレクトリ（省略時: ../Scales/）")
-    args = parser.parse_args()
+    return parser.parse_args(argv)
 
+
+def run(args: argparse.Namespace) -> None:
     output_dir = Path(args.output_dir)
 
     targets: list[tuple[str, str]] = []
@@ -86,3 +88,7 @@ def main() -> None:
 
         out_path.write_text(content, encoding="utf-8")
         print(f"[INFO] Generated: {out_path}", file=sys.stderr)
+
+
+def main() -> None:
+    run(parse_args())
