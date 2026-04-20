@@ -66,26 +66,31 @@ $ handpan-midi-to-score song.mid --scale d_kurd9 --bars-per-chunk 0
 
 ### MIDI ノート番号 → トーンフィールド番号
 
-変換開始時に、基音テーブルとハーモニクステーブルを構築する。
+変換開始時に、1つの統合テーブルを以下の **3パス** で構築する。先に登録された MIDI ノートは上書きされない。
 
 ```python
-# 基音テーブル
-midi_to_tf: dict[int, int] = {
-    midi: tf_num
-    for tf_num, midi in enumerate(scale.midi_notes)
-}
+midi_to_resolved: dict[int, tuple[int, int]] = {}  # midi → (tf_num, harmonic)
 
-# ハーモニクステーブル（基音 + 12 = ハーモニクス1、基音 + 19 = ハーモニクス2）
-midi_to_harmonic: dict[int, tuple[int, int]] = {}
+# Pass 1: 全 TF の基音（harmonic=0）を登録
 for tf_num, midi in enumerate(scale.midi_notes):
-    midi_to_harmonic[midi + 12] = (tf_num, 1)
-    midi_to_harmonic[midi + 19] = (tf_num, 2)
+    midi_to_resolved[midi] = (tf_num, 0)
+
+# Pass 2: 全 TF のハーモニクス1（+12半音）を登録
+for tf_num, midi in enumerate(scale.midi_notes):
+    if midi + 12 not in midi_to_resolved:
+        midi_to_resolved[midi + 12] = (tf_num, 1)
+
+# Pass 3: 全 TF のハーモニクス2（+19半音）を登録
+for tf_num, midi in enumerate(scale.midi_notes):
+    if midi + 19 not in midi_to_resolved:
+        midi_to_resolved[midi + 19] = (tf_num, 2)
 ```
 
-ノートの判定順序:
-1. `midi_to_tf` に存在する → 通常ノート
-2. `midi_to_harmonic` に存在する → ハーモニクスノート（`TFn^1` または `TFn^2`）
-3. どちらにも存在しない → スキップ
+優先順位: **基音 > ハーモニクス1 > ハーモニクス2**。同じハーモニクスレベル内ではトーンフィールド番号の小さい TF が優先される。
+
+ノートの判定:
+1. `midi_to_resolved` に存在する → `harmonic=0` なら通常ノート、`harmonic=1/2` ならハーモニクスノート（`TFn^1` / `TFn^2`）
+2. 存在しない → スキップ
 
 ### ナチュラルマイナーへの正規化（`--normalize-minor`）
 
@@ -238,24 +243,41 @@ for tf_num, midi in enumerate(scale.midi_notes):
 
 ### MIDI → パート割り当て
 
-1. 全パートの `midi_notes` を結合し `midi_to_part: dict[int, (part_index, tf_num)]` を構築
-2. 同一 MIDI ノートが複数パートに存在する場合は先のパート（インデックス小）を優先
-3. 各パートのトークン列を独立して生成し、相手パートが演奏する時刻は `H`（非表示休符）で埋める
-   - `H` の音価は、その `tick_start` に該当するノートの量子化後音価を使用する
-   - 和音の場合は和音内の最長音価を使用する（単音トークンと同じ規則）
+統合テーブルを以下の **3パス** で構築する。先に登録された MIDI ノートは上書きされない。
+
+優先順位:
+**(1台目基音→2台目基音→...) → (1台目ハーモニクス1→2台目ハーモニクス1→...) → (1台目ハーモニクス2→2台目ハーモニクス2→...)**
 
 ```python
-midi_to_part: dict[int, tuple[int, int]] = {}
+midi_to_resolved: dict[int, tuple[int, int, int]] = {}  # midi → (part_idx, tf_num, harmonic)
+
+# Pass 1: 全パート・全 TF の基音を登録
 for part_idx, part in enumerate(ensemble.parts):
     for tf_num, midi in enumerate(part.scale.midi_notes):
-        if midi in midi_to_part:
-            first = ensemble.parts[midi_to_part[midi][0]].instrument_name
+        if midi in midi_to_resolved:
+            first = ensemble.parts[midi_to_resolved[midi][0]].instrument_name
             print(f"[WARN] Overlapping MIDI note {midi} in ensemble: "
                   f"{part.instrument_name} TF{tf_num} shadowed by {first}",
                   file=sys.stderr)
         else:
-            midi_to_part[midi] = (part_idx, tf_num)
+            midi_to_resolved[midi] = (part_idx, tf_num, 0)
+
+# Pass 2: 全パート・全 TF のハーモニクス1（+12半音）を登録
+for part_idx, part in enumerate(ensemble.parts):
+    for tf_num, midi in enumerate(part.scale.midi_notes):
+        if midi + 12 not in midi_to_resolved:
+            midi_to_resolved[midi + 12] = (part_idx, tf_num, 1)
+
+# Pass 3: 全パート・全 TF のハーモニクス2（+19半音）を登録
+for part_idx, part in enumerate(ensemble.parts):
+    for tf_num, midi in enumerate(part.scale.midi_notes):
+        if midi + 19 not in midi_to_resolved:
+            midi_to_resolved[midi + 19] = (part_idx, tf_num, 2)
 ```
+
+各パートのトークン列を独立して生成し、相手パートが演奏する時刻は `H`（非表示休符）で埋める。
+- `H` の音価は、その `tick_start` に該当するノートの量子化後音価を使用する
+- 和音の場合は和音内の最長音価を使用する（単音トークンと同じ規則）
 
 `--bars-per-chunk` 小節ごとに `<< ... \\ ... >>` ブロック単位で分割する。
 
