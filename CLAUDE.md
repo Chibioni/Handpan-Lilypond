@@ -44,6 +44,7 @@ cd midiToHandpanScore
 # MIDI → ハンドパン楽譜 (.ly) に変換
 uv run handpan-midi-to-score input.mid --scale d_kurd9
 uv run handpan-midi-to-score input.mid --ensemble f_sharp_minor18
+uv run handpan-midi-to-score input.mid --scale d_kurd9 --normalize-minor  # ♮6・♮7 をナチュラルマイナーへ丸める
 
 # スケール定義 .ly ファイルを Scales/ に生成
 uv run handpan-generate-scales

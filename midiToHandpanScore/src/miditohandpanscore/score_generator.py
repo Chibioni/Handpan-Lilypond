@@ -2,7 +2,9 @@
 
 import sys
 from collections.abc import Iterator
-from typing import Literal, NamedTuple, TypeAlias
+from typing import Literal, NamedTuple, TypeAlias, TypeVar
+
+_LookupT = TypeVar("_LookupT")
 
 from .midi_processing import MidiData, TimeSignatureChange
 from .models import MidiNoteEvent, HandpanScale, HandpanSet
@@ -127,11 +129,43 @@ def _chord_token(note_tokens: list[Token]) -> Token:
     return f"< {' '.join(note_tokens)} >"
 
 
-def _build_scale_tables(scale: HandpanScale) -> dict[int, ScaleLookup]:
+def _minor_raised_pcs(root_midi: int) -> frozenset[int]:
+    """ナチュラルマイナーのルートから、ハーモニックマイナー・メロディックマイナーで
+    生じる「上昇した短6度・短7度」のピッチクラス集合を返す。
+
+    ナチュラルマイナーの長6度(root+9)・長7度(root+11)が
+    メロディックマイナー / ハーモニックマイナーで使われる音に対応する。
+    """
+    return frozenset({(root_midi + 9) % 12, (root_midi + 11) % 12})
+
+
+def _apply_minor_normalization(
+    midi_to_resolved: dict[int, _LookupT],
+    root_midi: int,
+) -> None:
+    """変換テーブルにナチュラルマイナー正規化エントリを追加する（in-place）。
+
+    root_midi を基準とした上昇6度・上昇7度の MIDI ノートについて、
+    1半音下（ナチュラルマイナー相当）がテーブルに存在する場合にのみ同じ値を写像する。
+    """
+    raised_pcs = _minor_raised_pcs(root_midi)
+    for midi_note in range(128):
+        if midi_note % 12 in raised_pcs and midi_note not in midi_to_resolved:
+            natural = midi_note - 1
+            if natural in midi_to_resolved:
+                midi_to_resolved[midi_note] = midi_to_resolved[natural]
+
+
+def _build_scale_tables(
+    scale: HandpanScale,
+    normalize_minor: bool = False,
+) -> dict[int, ScaleLookup]:
     """スケールから MIDI ノート番号の変換テーブルを構築する。
 
     Args:
         scale: 変換対象の HandpanScale。
+        normalize_minor: True の場合、ハーモニックマイナー・メロディックマイナーの
+            上昇した短6度・短7度をナチュラルマイナーの音へ丸める。
 
     Returns:
         MIDI ノート番号 → ScaleLookup(トーンフィールド番号, ハーモニクス番号) の辞書。
@@ -146,14 +180,21 @@ def _build_scale_tables(scale: HandpanScale) -> dict[int, ScaleLookup]:
                 midi_to_resolved[harmonic_midi] = ScaleLookup(
                     tone_field_number=tone_field_number, harmonic=interval.harmonic_number
                 )
+    if normalize_minor:
+        _apply_minor_normalization(midi_to_resolved, scale.midi_notes[0])
     return midi_to_resolved
 
 
-def _build_set_tables(handpan_set: HandpanSet) -> dict[int, SetLookup]:
+def _build_set_tables(
+    handpan_set: HandpanSet,
+    normalize_minor: bool = False,
+) -> dict[int, SetLookup]:
     """HandpanSet から MIDI ノート番号の変換テーブルを構築する。
 
     Args:
         handpan_set: 変換対象の HandpanSet。
+        normalize_minor: True の場合、各パートのルートを基準に
+            ハーモニックマイナー・メロディックマイナーの音をナチュラルマイナーへ丸める。
 
     Returns:
         MIDI ノート番号 → SetLookup(パートインデックス, トーンフィールド番号, ハーモニクス番号) の辞書。
@@ -180,6 +221,9 @@ def _build_set_tables(handpan_set: HandpanSet) -> dict[int, SetLookup]:
                     midi_to_resolved[harmonic_midi] = SetLookup(
                         part_index=part_index, tone_field_number=tone_field_number, harmonic=interval.harmonic_number
                     )
+    if normalize_minor:
+        for part in handpan_set.parts:
+            _apply_minor_normalization(midi_to_resolved, part.scale.midi_notes[0])
     return midi_to_resolved
 
 
@@ -310,6 +354,7 @@ def events_to_tokens(
     scale: HandpanScale,
     min_duration: DurationStr = "32",
     scale_label: str = "",
+    normalize_minor: bool = False,
 ) -> list[Token]:
     """MidiData を単スケール用のハンドパン記法トークンリストに変換する。
 
@@ -318,13 +363,15 @@ def events_to_tokens(
         scale: 使用するハンドパンスケール。
         min_duration: この音価より短いノートをスキップする（例: "16", "32"）。
         scale_label: 警告メッセージに表示するスケール名。省略時は scale.ly_name を使用。
+        normalize_minor: True の場合、ハーモニックマイナー・メロディックマイナーの
+            上昇した短6度・短7度をナチュラルマイナーの音へ丸める。
 
     Returns:
         ハンドパン記法トークンのリスト（例: ["1-4", "\\|", "< 2-8 3-8 >"]）。
     """
     _validate_min_duration(min_duration)
 
-    midi_to_resolved = _build_scale_tables(scale)
+    midi_to_resolved = _build_scale_tables(scale, normalize_minor=normalize_minor)
     min_beats = DUR_TO_BEATS[min_duration]
     ticks_per_beat = midi_data.ticks_per_beat
     label = scale_label or scale.ly_name
@@ -371,6 +418,7 @@ def events_to_tokens_per_part(
     midi_data: MidiData,
     handpan_set: HandpanSet,
     min_duration: DurationStr = "32",
+    normalize_minor: bool = False,
 ) -> list[list[Token]]:
     """MidiData を HandpanSet 用のパートごとのトークンリストに変換する。
 
@@ -381,13 +429,15 @@ def events_to_tokens_per_part(
         midi_data: 読み込み済みの MIDI データ。
         handpan_set: 使用するハンドパンセット（複数台構成）。
         min_duration: この音価より短いノートをスキップする（例: "16", "32"）。
+        normalize_minor: True の場合、各パートのルートを基準に
+            ハーモニックマイナー・メロディックマイナーの音をナチュラルマイナーへ丸める。
 
     Returns:
         パートごとのトークンリスト。インデックスは handpan_set.parts の順に対応。
     """
     _validate_min_duration(min_duration)
 
-    midi_to_resolved = _build_set_tables(handpan_set)
+    midi_to_resolved = _build_set_tables(handpan_set, normalize_minor=normalize_minor)
     min_beats = DUR_TO_BEATS[min_duration]
     ticks_per_beat = midi_data.ticks_per_beat
     n_parts = len(handpan_set.parts)

@@ -81,6 +81,7 @@ handpan-midi-to-score input.mid (--scale SCALE_NAME | --ensemble SET_NAME) [opti
 | `--min-duration DUR`  | この音価より短いノートはスキップ（`4`, `8`, `16`, `32` など）    | `32`                     |
 | `--track N`           | 読み込む MIDI トラック番号（0 始まり）。省略時は全トラックを統合 | （全トラック）           |
 | `--bars-per-chunk N`  | 出力の 1 行あたりの小節数                                        | `4`                      |
+| `--normalize-minor`   | ハーモニックマイナー・メロディックマイナーの音をナチュラルマイナーへ丸める | （無効）           |
 
 **使用例:**
 
@@ -99,6 +100,9 @@ handpan-midi-to-score my_song.mid --ensemble f_sharp_minor18
 
 # MIDI の 2 番目のトラックのみ使用
 handpan-midi-to-score my_song.mid --scale d_kurd9 --track 1
+
+# ハーモニックマイナー・メロディックマイナーの音をナチュラルマイナーに丸める
+handpan-midi-to-score my_song.mid --scale d_kurd9 --normalize-minor
 ```
 
 ---

@@ -12,3 +12,13 @@ LilyPond ライブラリ。ハンドパン専用の独自記法文字列（例: 
 - LilyPond ライブラリとして使用: `.ly` ファイルで `\include "Handpan.ily"` → `\SetTranslateTable` → `\HandpanScore "..."` 
 - MIDI → 楽譜変換: `cd midiToHandpanScore && uv run handpan-midi-to-score input.mid --scale d_kurd9`
 - スケール定義ファイル生成: `cd midiToHandpanScore && uv run handpan-generate-scales`
+
+## handpan-midi-to-score の主なオプション
+
+| オプション | 説明 |
+|---|---|
+| `--scale` / `--ensemble` | スケール名またはセット名（排他・必須） |
+| `--min-duration DUR` | 最小音価（デフォルト: 32） |
+| `--bars-per-chunk N` | 1チャンクあたりの小節数（デフォルト: 4） |
+| `--track N` / `--tempo BPM` / `--output FILE` | その他補助オプション |
+| `--normalize-minor` | ハーモニックマイナー・メロディックマイナーの音（長6度・長7度）をナチュラルマイナーへ丸める |

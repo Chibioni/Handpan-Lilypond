@@ -27,6 +27,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--min-duration", default="32", metavar="DUR", help="最小音価 (デフォルト: 32)")
     parser.add_argument("--track", type=int, metavar="N", help="トラック番号 (0始まり)")
     parser.add_argument("--bars-per-chunk", type=int, default=4, metavar="N", help="チャンクあたりの小節数")
+    parser.add_argument(
+        "--normalize-minor",
+        action="store_true",
+        help="ハーモニックマイナー・メロディックマイナーの音をナチュラルマイナーへ丸める",
+    )
 
     return parser.parse_args(argv)
 
@@ -58,14 +63,14 @@ def run(args: argparse.Namespace) -> None:
             print(f"[ERROR] Scale not found: {args.scale}", file=sys.stderr)
             sys.exit(1)
         scale = SCALES[args.scale]
-        tokens = events_to_tokens(midi_data, scale, args.min_duration, args.scale)
+        tokens = events_to_tokens(midi_data, scale, args.min_duration, args.scale, args.normalize_minor)
         content = generate_score_ly(tokens, scale, args.bars_per_chunk)
     else:
         if args.ensemble not in SETS:
             print(f"[ERROR] Ensemble not found: {args.ensemble}", file=sys.stderr)
             sys.exit(1)
         handpan_set = SETS[args.ensemble]
-        part_tokens = events_to_tokens_per_part(midi_data, handpan_set, args.min_duration)
+        part_tokens = events_to_tokens_per_part(midi_data, handpan_set, args.min_duration, args.normalize_minor)
         content = generate_set_score_ly(part_tokens, handpan_set, args.bars_per_chunk)
 
     output_path.write_text(content, encoding="utf-8")

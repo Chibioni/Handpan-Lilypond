@@ -207,10 +207,110 @@ class TestEventsToTokensPerPart:
         assert "\\|" in part_tokens[0]
         assert "\\|" in part_tokens[1]
 
+    def test_note_in_neither_part_skipped(self, two_part_set: HandpanSet, capsys: pytest.CaptureFixture[str]) -> None:
+        events = [make_event(99, 0, Q)]  # どのパートにも属さない MIDI 99
+        part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
+        assert part_tokens == [[], []]
+        assert "[WARN]" in capsys.readouterr().err
+
+    def test_min_duration_filters_short_note(self, two_part_set: HandpanSet, capsys: pytest.CaptureFixture[str]) -> None:
+        events = [make_event(62, 0, Q // 2)]  # D4、8分音符 < min_duration="4"
+        part_tokens = events_to_tokens_per_part(
+            make_midi_data(events), two_part_set, min_duration="4"
+        )
+        assert part_tokens == [[], []]
+        assert "[WARN]" in capsys.readouterr().err
+
+    def test_technique_marker_applied_to_correct_part(self, two_part_set: HandpanSet) -> None:
+        # MIDI 0 (Apex) + D4(62) → PartA に "O0-4"、PartB は非表示休符
+        events = [make_event(0, 0, Q), make_event(62, 0, Q)]
+        part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
+        assert part_tokens[0][0] == "O0-4"
+        assert part_tokens[1][0].startswith("H-")
+
 
 # ---------------------------------------------------------------------------
 # generate_score_ly
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# normalize_minor オプション
+# ---------------------------------------------------------------------------
+
+# D Kurd 9 のルートは D3(MIDI 50)。
+# 上昇7度: C#4 (MIDI 61) → C4 (MIDI 60) = TF3 基音
+# 上昇6度: B♮4 (MIDI 71) → Bb4 (MIDI 70) = TF2 ハーモニクス1
+
+class TestNormalizeMinorEventsToTokens:
+    def test_raised_7th_mapped_to_natural(self, kurd9):
+        events = [make_event(61, 0, Q)]  # C#4 → C4(TF3)
+        tokens = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=True)
+        assert tokens == ["3-4"]
+
+    def test_raised_6th_mapped_to_harmonic(self, kurd9):
+        events = [make_event(71, 0, Q)]  # B♮4 → Bb4 harmonic1(TF2^1)
+        tokens = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=True)
+        assert tokens == ["2^1-4"]
+
+    def test_raised_note_skipped_without_flag(self, kurd9, capsys):
+        events = [make_event(61, 0, Q)]  # C#4: スケールにない
+        tokens = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=False)
+        assert tokens == []
+        assert "[WARN]" in capsys.readouterr().err
+
+    def test_normal_notes_unaffected(self, kurd9):
+        events = [make_event(60, 0, Q)]  # C4(TF3): 正規化の有無で変わらない
+        tokens_with = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=True)
+        tokens_without = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=False)
+        assert tokens_with == tokens_without == ["3-4"]
+
+    def test_raised_note_no_natural_in_scale_skipped(self, kurd9, capsys):
+        # E Kurd 9 など C# がナチュラルマイナーにある場合は別だが、
+        # D Kurd 9 の D+9=B♮ は Bb がスケールにあるので写像される。
+        # 逆に写像先がスケールにない例として、TF 存在しない MIDI 番号を直接検証。
+        # ここでは「上昇7度だが 1半音下もスケールにない」状況を手動構築する。
+        scale_no_c = HandpanScale("Test", ["D4", "E4", "F4"], "d \\minor")
+        # D4 root (PC=2): 上昇7度 = C#5 (MIDI 73), 自然7度 = C5 (MIDI 72)
+        # C5 は scale_no_c に含まれない → スキップ
+        events = [make_event(73, 0, Q)]
+        tokens = events_to_tokens(make_midi_data(events), scale_no_c, normalize_minor=True)
+        assert tokens == []
+        assert "[WARN]" in capsys.readouterr().err
+
+
+@pytest.fixture
+def normalize_minor_set() -> HandpanSet:
+    # PartA: D4(62), C4(60)  ← D root、C はナチュラル7度
+    # PartB: A3(57), G3(55)  ← A root、G はナチュラル7度
+    # → PartA の C#4(61) は C4(60) に正規化されて PartA へ
+    scale_a = HandpanScale("Test", ["D4", "C4"], "d \\minor")
+    scale_b = HandpanScale("Test", ["A3", "G3"], "a \\minor")
+    return HandpanSet(
+        scale_family="Test",
+        parts=[HandpanPart("PartA", scale_a), HandpanPart("PartB", scale_b)],
+        key_signature="d \\minor",
+    )
+
+
+class TestNormalizeMinorEventsToTokensPerPart:
+    def test_raised_note_routed_to_correct_part(self, normalize_minor_set):
+        # C#4(61) → C4(60) = PartA TF1
+        events = [make_event(61, 0, Q)]
+        part_tokens = events_to_tokens_per_part(
+            make_midi_data(events), normalize_minor_set, normalize_minor=True
+        )
+        assert "H-" not in part_tokens[0][0]       # PartA に実音
+        assert part_tokens[1][0].startswith("H-")  # PartB は非表示休符
+
+    def test_raised_note_skipped_without_flag(self, normalize_minor_set, capsys):
+        # normalize_minor=False では C#4(61) はスキップ
+        events = [make_event(61, 0, Q)]
+        part_tokens = events_to_tokens_per_part(
+            make_midi_data(events), normalize_minor_set, normalize_minor=False
+        )
+        assert part_tokens == [[], []]
+        assert "[WARN]" in capsys.readouterr().err
+
 
 class TestGenerateScoreLy:
     def test_version_header(self, kurd9):
@@ -267,3 +367,13 @@ class TestGenerateSetScoreLy:
         tokens_b = ["H-4"] + ["\\|"] * 7 + ["H-4"]
         result = generate_set_score_ly([tokens_a, tokens_b], two_part_set, bars_per_chunk=4)
         assert result.count("<<") == 2
+
+    def test_scale_include_present(self, two_part_set: HandpanSet) -> None:
+        result = generate_set_score_ly([[], []], two_part_set)
+        assert '\\include "../Scales/' in result
+
+    def test_handpan_score_tokens_per_part(self, two_part_set: HandpanSet) -> None:
+        result = generate_set_score_ly([["0-4"], ["1-4"]], two_part_set)
+        assert result.count("\\HandpanScore") == 2
+        assert '"0-4"' in result
+        assert '"1-4"' in result

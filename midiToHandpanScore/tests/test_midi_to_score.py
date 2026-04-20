@@ -13,6 +13,7 @@ import pytest
 from miditohandpanscore.midi_to_score import parse_args, run
 
 FIXTURE_MID = Path(__file__).parent / "fixtures" / "d_kurd9.mid"
+FIXTURE_NORMALIZE_MID = Path(__file__).parent / "fixtures" / "normalize_minor.mid"
 
 
 def make_args(**kwargs) -> argparse.Namespace:
@@ -26,6 +27,7 @@ def make_args(**kwargs) -> argparse.Namespace:
         min_duration="32",
         track=None,
         bars_per_chunk=4,
+        normalize_minor=False,
     )
     defaults.update(kwargs)
     return argparse.Namespace(**defaults)
@@ -73,6 +75,14 @@ class TestParseArgs:
     def test_track_parsed_as_int(self):
         args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9", "--track", "1"])
         assert args.track == 1
+
+    def test_normalize_minor_default_false(self):
+        args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9"])
+        assert args.normalize_minor is False
+
+    def test_normalize_minor_flag(self):
+        args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9", "--normalize-minor"])
+        assert args.normalize_minor is True
 
 
 # ---------------------------------------------------------------------------
@@ -231,3 +241,48 @@ class TestIntegrationScaleMode:
         out = tmp_path / "out.ly"
         run(make_args(bars_per_chunk=1, output=str(out)))
         assert out.read_text().count("\\HandpanScore") == 4
+
+
+# ---------------------------------------------------------------------------
+# 統合テスト — normalize_minor.mid フィクスチャで --normalize-minor を検証
+#
+# normalize_minor.mid の設計（D Kurd 9、120BPM、4/4、1小節）:
+#   tick=0:    D4(62)  Q → TF4        通常スケール音
+#   tick=480:  C#4(61) Q → TF3        raised 7th（normalize 時）
+#   tick=960:  B♮4(71) Q → TF2^1      raised 6th（normalize 時）
+#   tick=1440: C#5(73) Q → TF3^1      raised 7th 高音域（normalize 時）
+# ---------------------------------------------------------------------------
+
+NM_INPUT = str(FIXTURE_NORMALIZE_MID)
+
+
+class TestIntegrationNormalizeMinor:
+    def test_raised_7th_mapped_with_flag(self, tmp_path: Path) -> None:
+        out = tmp_path / "out.ly"
+        run(make_args(input=NM_INPUT, normalize_minor=True, output=str(out)))
+        assert "3-4" in out.read_text()
+
+    def test_raised_6th_mapped_with_flag(self, tmp_path: Path) -> None:
+        out = tmp_path / "out.ly"
+        run(make_args(input=NM_INPUT, normalize_minor=True, output=str(out)))
+        assert "2^1-4" in out.read_text()
+
+    def test_raised_7th_high_octave_mapped_with_flag(self, tmp_path: Path) -> None:
+        out = tmp_path / "out.ly"
+        run(make_args(input=NM_INPUT, normalize_minor=True, output=str(out)))
+        assert "3^1-4" in out.read_text()
+
+    def test_normal_note_present_regardless_of_flag(self, tmp_path: Path) -> None:
+        for flag in (True, False):
+            out = tmp_path / f"out_{flag}.ly"
+            run(make_args(input=NM_INPUT, normalize_minor=flag, output=str(out)))
+            assert "4-4" in out.read_text()
+
+    def test_raised_notes_skipped_without_flag(self, tmp_path: Path) -> None:
+        out = tmp_path / "out.ly"
+        run(make_args(input=NM_INPUT, normalize_minor=False, output=str(out)))
+        content = out.read_text()
+        # raised notes はスケール外なのでトークンが出力されない
+        assert "3-4" not in content
+        assert "2^1-4" not in content
+        assert "3^1-4" not in content

@@ -12,6 +12,8 @@ from miditohandpanscore.score_generator import (
     _split_markers,
     _bar_ticks,
     _split_chunks,
+    _minor_raised_pcs,
+    _apply_minor_normalization,
 )
 
 
@@ -136,6 +138,88 @@ class TestBuildScaleTables:
         # D3(50)+19=69 は TF0 のハーモニクス2 だが、69 は TF8 (A4) の基音でもある → 基音が優先
         table = _build_scale_tables(kurd9)
         assert table[69] == (8, 0)
+
+    # normalize_minor=True のテスト
+    # D Kurd 9 のルートは D3(MIDI 50)。
+    # 上昇6度 = D+9半音 = B♮ (PC=11)、上昇7度 = D+11半音 = C# (PC=1)。
+
+    def test_normalize_minor_raised_7th_maps_to_natural(self, kurd9):
+        # C#4 (MIDI 61) → C4 (MIDI 60) = TF3 基音
+        table = _build_scale_tables(kurd9, normalize_minor=True)
+        assert table[61] == (3, 0)
+
+    def test_normalize_minor_raised_6th_maps_to_harmonic(self, kurd9):
+        # B♮4 (MIDI 71) → Bb4 (MIDI 70) = TF2 ハーモニクス1
+        table = _build_scale_tables(kurd9, normalize_minor=True)
+        assert table[71] == (2, 1)
+
+    def test_normalize_minor_raised_7th_higher_octave(self, kurd9):
+        # C#5 (MIDI 73) → C5 (MIDI 72) = TF3 ハーモニクス1
+        table = _build_scale_tables(kurd9, normalize_minor=True)
+        assert table[73] == (3, 1)
+
+    def test_normalize_minor_off_by_default(self, kurd9):
+        # normalize_minor=False（デフォルト）では C#4 はテーブルに存在しない
+        table = _build_scale_tables(kurd9)
+        assert 61 not in table
+
+    def test_normalize_minor_does_not_override_existing(self, kurd9):
+        # 既にテーブルにある MIDI ノートは上書きされない
+        table_without = _build_scale_tables(kurd9)
+        table_with = _build_scale_tables(kurd9, normalize_minor=True)
+        for midi, lookup in table_without.items():
+            assert table_with[midi] == lookup
+
+
+# ---------------------------------------------------------------------------
+# _minor_raised_pcs
+# ---------------------------------------------------------------------------
+
+class TestMinorRaisedPcs:
+    def test_d_root(self):
+        # D (PC=2): 上昇6度=11 (B♮), 上昇7度=1 (C#)
+        assert _minor_raised_pcs(50) == frozenset({11, 1})
+
+    def test_a_root(self):
+        # A (PC=9): 上昇6度=6 (F#), 上昇7度=8 (G#)
+        assert _minor_raised_pcs(57) == frozenset({6, 8})
+
+    def test_octave_invariant(self):
+        # オクターブが違っても同じ結果
+        assert _minor_raised_pcs(50) == _minor_raised_pcs(62)
+
+
+# ---------------------------------------------------------------------------
+# _apply_minor_normalization
+# ---------------------------------------------------------------------------
+
+class TestApplyMinorNormalization:
+    def test_raised_7th_added(self):
+        # C4(60) → TF3 がある状態で D ルートの正規化 → C#4(61) が追加される
+        table: dict[int, tuple[int, int]] = {60: (3, 0)}
+        _apply_minor_normalization(table, root_midi=50)  # D root
+        assert 61 in table
+        assert table[61] == (3, 0)
+
+    def test_raised_6th_added(self):
+        # Bb4(70) → TF2 harmonic=1 がある状態 → B♮4(71) が追加される
+        table: dict[int, tuple[int, int]] = {70: (2, 1)}
+        _apply_minor_normalization(table, root_midi=50)  # D root
+        assert 71 in table
+        assert table[71] == (2, 1)
+
+    def test_no_natural_no_mapping(self):
+        # 自然短音がテーブルにない場合は写像しない
+        table: dict[int, tuple[int, int]] = {}
+        _apply_minor_normalization(table, root_midi=50)
+        assert 61 not in table
+        assert 71 not in table
+
+    def test_existing_entry_not_overwritten(self):
+        # 既存エントリは上書きされない
+        table: dict[int, tuple[int, int]] = {61: (99, 0), 60: (3, 0)}
+        _apply_minor_normalization(table, root_midi=50)
+        assert table[61] == (99, 0)
 
 
 # ---------------------------------------------------------------------------
