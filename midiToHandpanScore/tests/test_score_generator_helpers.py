@@ -129,10 +129,18 @@ class TestBuildScaleTables:
         # Bb3(58) + 12 = Bb4(70) → TF2, harmonic 1
         assert table[70] == (2, 1)
 
-    def test_harmonic2_twelfth(self, kurd9):
+    def test_harmonic2(self, kurd9):
         table = _build_scale_tables(kurd9)
-        # Bb3(58) + 19 = F5(77) → TF2, harmonic 2
-        assert table[77] == (2, 2)
+        # E4(64) + 19 = B5(83) → TF5, harmonic 2
+        assert table[83] == (5, 2)
+        # F4(65) + 19 = C6(84) → TF6, harmonic 2
+        assert table[84] == (6, 2)
+
+    def test_harmonic1_priority_over_harmonic2(self, kurd9):
+        table = _build_scale_tables(kurd9)
+        # F4(65)+12=F5(77) と Bb3(58)+19=F5(77) が衝突する。
+        # 全 TF ハーモニクス1 の登録が先に完了するため TF6 ハーモニクス1 が勝つ。
+        assert table[77] == (6, 1)
 
     def test_base_note_overrides_harmonic(self, kurd9):
         # D3(50)+19=69 は TF0 のハーモニクス2 だが、69 は TF8 (A4) の基音でもある → 基音が優先

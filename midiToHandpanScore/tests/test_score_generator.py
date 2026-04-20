@@ -84,8 +84,8 @@ EXPECTED_TOKENS = [
     # 小節3: ハーモニクス
     "2^1-4",  # Bb4 = Bb3+12 ハーモニクス1
     "3^1-4",  # C5  = C4+12  ハーモニクス1
-    "2^2-4.", # F5  = Bb3+19 ハーモニクス2 付点4分
-    "3^2-8",  # G5  = C4+19  ハーモニクス2
+    "5^2-4.", # B5  = E4+19  ハーモニクス2 付点4分
+    "6^2-8",  # C6  = F4+19  ハーモニクス2
     "\\|",
     # 小節4: 残りのスケール音
     "4-2",    # D4 2分音符
@@ -123,8 +123,8 @@ class TestEventsToTokensFromFixture:
         bar3 = tokens[separators[1] + 1 : separators[2]]
         assert "2^1-4" in bar3
         assert "3^1-4" in bar3
-        assert "2^2-4." in bar3
-        assert "3^2-8" in bar3
+        assert "5^2-4." in bar3
+        assert "6^2-8" in bar3
 
     def test_bar4_durations(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)

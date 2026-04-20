@@ -162,6 +162,9 @@ def _build_scale_tables(
 ) -> dict[int, ScaleLookup]:
     """スケールから MIDI ノート番号の変換テーブルを構築する。
 
+    登録優先順位: 全 TF の基音 → 全 TF のハーモニクス1 → 全 TF のハーモニクス2。
+    先に登録された MIDI ノートは上書きされない。
+
     Args:
         scale: 変換対象の HandpanScale。
         normalize_minor: True の場合、ハーモニックマイナー・メロディックマイナーの
@@ -172,9 +175,12 @@ def _build_scale_tables(
         基音は harmonic=0、ハーモニクス1は harmonic=1、ハーモニクス2は harmonic=2。
     """
     midi_to_resolved: dict[int, ScaleLookup] = {}
+    # Pass 1: 全 TF の基音を登録
     for tone_field_number, midi in enumerate(scale.midi_notes):
         midi_to_resolved[midi] = ScaleLookup(tone_field_number=tone_field_number, harmonic=0)
-        for interval in _HARMONIC_INTERVALS:
+    # Pass 2+: ハーモニクスレベル順（1 → 2）で全 TF を登録
+    for interval in _HARMONIC_INTERVALS:
+        for tone_field_number, midi in enumerate(scale.midi_notes):
             harmonic_midi = midi + interval.semitones
             if harmonic_midi not in midi_to_resolved:
                 midi_to_resolved[harmonic_midi] = ScaleLookup(
@@ -191,6 +197,10 @@ def _build_set_tables(
 ) -> dict[int, SetLookup]:
     """HandpanSet から MIDI ノート番号の変換テーブルを構築する。
 
+    登録優先順位:
+      (1台目基音→2台目基音→...) → (1台目ハーモニクス1→2台目ハーモニクス1→...) → (1台目ハーモニクス2→...)
+    先に登録された MIDI ノートは上書きされない。
+
     Args:
         handpan_set: 変換対象の HandpanSet。
         normalize_minor: True の場合、各パートのルートを基準に
@@ -202,6 +212,7 @@ def _build_set_tables(
         同じ MIDI ノートが複数パートに存在する場合は先着優先で登録し警告を出す。
     """
     midi_to_resolved: dict[int, SetLookup] = {}
+    # Pass 1: 全パート・全 TF の基音を登録（1台目→2台目→...の順）
     for part_index, part in enumerate(handpan_set.parts):
         for tone_field_number, midi in enumerate(part.scale.midi_notes):
             if midi in midi_to_resolved:
@@ -215,7 +226,10 @@ def _build_set_tables(
                 midi_to_resolved[midi] = SetLookup(
                     part_index=part_index, tone_field_number=tone_field_number, harmonic=0
                 )
-            for interval in _HARMONIC_INTERVALS:
+    # Pass 2+: ハーモニクスレベル順（1 → 2）で全パート・全 TF を登録
+    for interval in _HARMONIC_INTERVALS:
+        for part_index, part in enumerate(handpan_set.parts):
+            for tone_field_number, midi in enumerate(part.scale.midi_notes):
                 harmonic_midi = midi + interval.semitones
                 if harmonic_midi not in midi_to_resolved:
                     midi_to_resolved[harmonic_midi] = SetLookup(
