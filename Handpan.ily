@@ -180,40 +180,36 @@ SetTranslateTable =
   )
 )
 
-% リスト最後のlilypond要素に、articulationsを追加する
+% リスト内の末尾 NoteEvent または EventChord の articulations に music を追加する
+% BeamEvent 等が混在するリストにも対応
 % テスト書いた
 #(define (add-articulation-to-last music-list articulation-music)
-  (unless (playable-event-list? music-list) ;; music-listのチェック
-    (error "add-articulation-to-last: music-list must be a non-empty list of playable music expressions"))
-  (unless (ly:music? articulation-music) ;; articulation-musicのチェック
+  (unless (and (list? music-list) (not (null? music-list)))
+    (error "add-articulation-to-last: music-list must be a non-empty list"))
+  (unless (ly:music? articulation-music)
     (error "add-articulation-to-last: articulation-music must be a music expression"))
 
-  ;; リスト内、最後のNoteEventとそのindexを取得
-  (define (find-last-note-index lst)
+  ;; リスト内、末尾の NoteEvent または EventChord とそのインデックスを取得
+  (define (find-last-idx lst)
     (let* ((len (length lst))
            (rev (reverse lst)))
       (let loop ((rev-list rev) (rev-idx 0))
         (cond
           ((null? rev-list)
-           (error "add-articulation-to-last: no NoteEvent found in music-list"))
-          ((note-event? (car rev-list))
-           ;; reverse インデックス → 元のインデックス
+           (error "add-articulation-to-last: no NoteEvent or EventChord found in music-list"))
+          ((or (note-event? (car rev-list))
+               (eq? (ly:music-property (car rev-list) 'name) 'EventChord))
            (- len 1 rev-idx))
           (else
            (loop (cdr rev-list) (+ rev-idx 1)))))))
 
-  (let* ((last-idx (find-last-note-index music-list))
-         (head (list-head music-list last-idx))       ; index の手前まで
-         (note (list-ref music-list last-idx))        ; index の NoteEvent
-         (tail (list-tail music-list (+ last-idx 1))) ; index の次から最後まで
-         (existing-artics (or (ly:music-property note 'articulations) '()))
-         (new-artics (append existing-artics (list articulation-music)))
+  (let* ((last-idx (find-last-idx music-list))
+         (head     (list-head music-list last-idx))
+         (note     (list-ref  music-list last-idx))
+         (tail     (list-tail music-list (+ last-idx 1)))
+         (existing (or (ly:music-property note 'articulations) '()))
          (new-note (ly:music-deep-copy note)))
-    
-    ;; 新しい articulations をセット
-    (ly:music-set-property! new-note 'articulations new-artics)
-
-    ;; リストを再構築して返す
+    (ly:music-set-property! new-note 'articulations (append existing (list articulation-music)))
     (append head (list new-note) tail)))
 
 % 和音のグループを作成する
