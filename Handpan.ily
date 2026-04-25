@@ -129,6 +129,17 @@ SetTranslateTable =
         )
       )
 
+      ; タイの処理
+      ( (string=? (car tokens) "~")
+        (cond
+          ((null? result)
+            (error "parse-token-list: タイを最初のトークンには置けません"))
+          ((null? (cdr tokens))
+            (error "parse-token-list: タイの後に音符がありません"))
+          (else
+            (loop (cdr tokens)
+                  (cons (add-tie-to-music (car result)) (cdr result)))))
+      )
 
       (else
         (loop (cdr tokens) (cons (parse-note-element (car tokens)) result)))))
@@ -235,6 +246,49 @@ SetTranslateTable =
 #(define (bar-check? x)
   (and (ly:music? x)
        (eq? (ly:music-property x 'name) 'BarCheck)))
+
+% タイイベントなら true, それ以外なら false を返す
+% テスト書いた
+#(define (tie-event? x)
+  (and (ly:music? x)
+       (eq? (ly:music-property x 'name) 'TieEvent)))
+
+% 音楽オブジェクトにタイを追加して返す
+% テスト書いた
+#(define (add-tie-to-music music)
+  (unless (ly:music? music)
+    (error "add-tie-to-music: music must be a LilyPond music expression"))
+  (let ((tie-event (make-music 'TieEvent))
+        (name      (ly:music-property music 'name)))
+    (cond
+
+      ;; 休符・非表示休符・小節線 → 早期エラー
+      ((or (eq? name 'RestEvent)
+           (eq? name 'SkipEvent)
+           (eq? name 'BarCheck))
+        (error (string-append "add-tie-to-music: "
+                              (symbol->string name)
+                              " にはタイを追加できません")))
+
+      ;; NoteEvent または EventChord: articulations に TieEvent を追加
+      ((or (note-event? music)
+           (eq? name 'EventChord))
+        (let* ((new-music (ly:music-deep-copy music))
+               (existing  (or (ly:music-property new-music 'articulations) '())))
+          (ly:music-set-property! new-music 'articulations (append existing (list tie-event)))
+          new-music))
+
+      ;; SequentialMusic (連桁グループ): 末尾の NoteEvent/EventChord に追加
+      ((eq? name 'SequentialMusic)
+        (let* ((elements  (ly:music-property music 'elements))
+               (new-elems (add-articulation-to-last elements tie-event))
+               (new-music (ly:music-deep-copy music)))
+          (ly:music-set-property! new-music 'elements new-elems)
+          new-music))
+
+      (else
+        (error (string-append "add-tie-to-music: 未対応の音楽オブジェクト: "
+                              (symbol->string name)))))))
 
 % 休符なら true, それ以外なら false を返す
 % テスト書いた

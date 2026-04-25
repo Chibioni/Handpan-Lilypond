@@ -35,6 +35,7 @@ FILES=(
     "playable-event?-test.ly"
     "playable-event-list?-test.ly"
     "add-articulation-to-last-test.ly"
+    "tie-test.ly"
     "make-beam-group-test.ly"
     "parse-left-element-test.ly"
 )

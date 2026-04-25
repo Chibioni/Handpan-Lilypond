@@ -65,3 +65,18 @@
   (make-music 'SkipEvent
               'duration (make-test-duration duration))
 )
+
+% タイ付き NoteEvent を生成するヘルパー
+#(define (expected-note-with-tie pitch duration style)
+  (let* ((note      (expected-note-event pitch duration style))
+         (tie-event (make-music 'TieEvent)))
+    (ly:music-set-property! note 'articulations (list tie-event))
+    note))
+
+% タイ付き EventChord を生成するヘルパー（アクセント・ゴースト・和音）
+#(define (expected-chord-with-tie music)
+  (let* ((new-music (ly:music-deep-copy music))
+         (existing  (or (ly:music-property new-music 'articulations) '()))
+         (tie-event (make-music 'TieEvent)))
+    (ly:music-set-property! new-music 'articulations (append existing (list tie-event)))
+    new-music))
