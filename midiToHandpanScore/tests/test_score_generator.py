@@ -74,19 +74,19 @@ EXPECTED_TOKENS = [
     "1!-4",   # A3  vel=127 アクセント
     "2.-4.",  # Bb3 vel=20  ゴースト 付点4分
     "3-8",    # C4  vel=64  通常 8分
-    "\\|",
+    "|",
     # 小節2: 奏法マーカー + 付点・二重付点
     "O0-4",   # D3 + Apex リング打奏
     "S5-4",   # E4 + スラップ
     "6-8.",   # F4 付点8分
     "7-8..",  # G4 二重付点8分
-    "\\|",
+    "|",
     # 小節3: ハーモニクス
     "2^1-4",  # Bb4 = Bb3+12 ハーモニクス1
     "3^1-4",  # C5  = C4+12  ハーモニクス1
     "5^2-4.", # B5  = E4+19  ハーモニクス2 付点4分
     "6^2-8",  # C6  = F4+19  ハーモニクス2
-    "\\|",
+    "|",
     # 小節4: 残りのスケール音
     "4-2",    # D4 2分音符
     "8-4..",  # A4 二重付点4分 (840ticks = 1.75beats)
@@ -100,26 +100,26 @@ class TestEventsToTokensFromFixture:
 
     def test_bar_line_count(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        assert tokens.count("\\|") == 3
+        assert tokens.count("|") == 3
 
     def test_bar1_articulation(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        bar1 = tokens[: tokens.index("\\|")]
+        bar1 = tokens[: tokens.index("|")]
         assert "1!-4" in bar1   # アクセント
         assert "2.-4." in bar1  # ゴースト
 
     def test_bar2_techniques(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        bars = [t for t in tokens if t != "\\|"]
-        bar2_start = tokens.index("\\|") + 1
-        bar2_end = tokens.index("\\|", bar2_start)
+        bars = [t for t in tokens if t != "|"]
+        bar2_start = tokens.index("|") + 1
+        bar2_end = tokens.index("|", bar2_start)
         bar2 = tokens[bar2_start:bar2_end]
         assert "O0-4" in bar2
         assert "S5-4" in bar2
 
     def test_bar3_harmonics(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        separators = [i for i, t in enumerate(tokens) if t == "\\|"]
+        separators = [i for i, t in enumerate(tokens) if t == "|"]
         bar3 = tokens[separators[1] + 1 : separators[2]]
         assert "2^1-4" in bar3
         assert "3^1-4" in bar3
@@ -128,7 +128,7 @@ class TestEventsToTokensFromFixture:
 
     def test_bar4_durations(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        bar_indices = [i for i, t in enumerate(tokens) if t == "\\|"]
+        bar_indices = [i for i, t in enumerate(tokens) if t == "|"]
         bar4 = tokens[bar_indices[-1] + 1:]
         assert "4-2" in bar4    # 2分音符
         assert "8-4.." in bar4  # 二重付点4分
@@ -204,8 +204,8 @@ class TestEventsToTokensPerPart:
             make_event(57, Q * 4,    Q),  # 次の小節
         ]
         part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
-        assert "\\|" in part_tokens[0]
-        assert "\\|" in part_tokens[1]
+        assert "|" in part_tokens[0]
+        assert "|" in part_tokens[1]
 
     def test_note_in_neither_part_skipped(self, two_part_set: HandpanSet, capsys: pytest.CaptureFixture[str]) -> None:
         events = [make_event(99, 0, Q)]  # どのパートにも属さない MIDI 99
@@ -332,7 +332,7 @@ class TestGenerateScoreLy:
 
     def test_chunk_split_creates_two_blocks(self, kurd9):
         # 8小節分（bars_per_chunk=4）→ HandpanScore ブロックが 2 つ
-        tokens = ["0-4"] + ["\\|"] * 7 + ["1-4"]
+        tokens = ["0-4"] + ["|"] * 7 + ["1-4"]
         result = generate_score_ly(tokens, kurd9, bars_per_chunk=4)
         assert result.count("\\HandpanScore") == 2
 
@@ -363,8 +363,8 @@ class TestGenerateSetScoreLy:
         assert ">>" in result
 
     def test_chunk_split_creates_two_blocks(self, two_part_set):
-        tokens_a = ["0-4"] + ["\\|"] * 7 + ["1-4"]
-        tokens_b = ["H-4"] + ["\\|"] * 7 + ["H-4"]
+        tokens_a = ["0-4"] + ["|"] * 7 + ["1-4"]
+        tokens_b = ["H-4"] + ["|"] * 7 + ["H-4"]
         result = generate_set_score_ly([tokens_a, tokens_b], two_part_set, bars_per_chunk=4)
         assert result.count("<<") == 2
 

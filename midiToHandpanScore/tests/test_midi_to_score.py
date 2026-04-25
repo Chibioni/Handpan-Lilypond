@@ -218,7 +218,7 @@ class TestIntegrationScaleMode:
 
     def test_bar_line_count(self, kurd9_ly):
         # 4小節 → \\| が 3 回
-        assert kurd9_ly.count("\\|") == 3
+        assert kurd9_ly.count("|") == 3
 
     def test_scale_include(self, kurd9_ly):
         assert '\\include "../Scales/D_Kurd9.ly"' in kurd9_ly
