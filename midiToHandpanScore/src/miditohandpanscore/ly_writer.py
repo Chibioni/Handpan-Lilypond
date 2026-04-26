@@ -82,7 +82,8 @@ def generate_set_score_ly(
     for chunk_index in range(n_chunks):
         lines = ["    <<"]
         for part_index, part in enumerate(handpan_set.parts):
-            chunk = chunks_per_part[part_index][chunk_index] if chunk_index < len(chunks_per_part[part_index]) else []
+            part_chunks = chunks_per_part[part_index]
+            chunk = part_chunks[chunk_index] if chunk_index < len(part_chunks) else []
             lines.append(f"      \\SetTranslateTable #{part.instrument_name}")
             lines.append(f'      \\absolute {{ \\HandpanScore "{" ".join(e.to_token() for e in chunk)}" }}')
             if part_index < n_parts - 1:

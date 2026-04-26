@@ -42,10 +42,6 @@ class MarkerSplit(NamedTuple):
     real_notes: list[MidiNoteEvent]
 
 
-class BarGenState(NamedTuple):
-    generator: Iterator[int]
-    next_tick: int
-
 
 # ---------------------------------------------------------------------------
 # Low-level helpers
@@ -100,19 +96,6 @@ def _bar_ticks(
         current_tick += bar_length_ticks
 
 
-def _init_bar_gen(
-    time_sig_changes: list[TimeSignatureChange],
-    ticks_per_beat: int,
-) -> BarGenState:
-    """小節境界ジェネレータを初期化し、最初の小節境界ティックを返す。
-
-    tick=0 はスキップする（楽譜先頭に小節線は不要）。
-    """
-    generator = _bar_ticks(time_sig_changes, ticks_per_beat)
-    next(generator)  # skip tick 0 — 先頭に小節線不要
-    return BarGenState(generator=generator, next_tick=next(generator))
-
-
 # ---------------------------------------------------------------------------
 # Duration validation
 # ---------------------------------------------------------------------------
@@ -148,7 +131,10 @@ def _resolve_event(
 ) -> ToneFieldNote | None:
     """1つの MIDI イベントを正規化 → TF 検索 → 音価検証 → ToneFieldNote に変換する。
     スキップ対象は None を返す。"""
-    midi = normalize_midi(event.midi_note, norm_info) if normalize_minor else event.midi_note
+    if normalize_minor:
+        midi = normalize_midi(event.midi_note, norm_info)
+    else:
+        midi = event.midi_note
     lookup = find_lookup(midi, priority)
     if lookup is None:
         print(f"[WARN] Skipped MIDI note {event.midi_note} at tick {tick_start}: not in {warn_label}", file=sys.stderr)
@@ -205,17 +191,19 @@ def events_to_tokens_per_part(
     n_parts = len(handpan_set.parts)
 
     groups, sorted_ticks = _group_by_tick(midi_data.events)
-    generator, next_tick = _init_bar_gen(midi_data.time_sig_changes, ticks_per_beat)
+    generator = _bar_ticks(midi_data.time_sig_changes, ticks_per_beat)
+    next(generator)  # tick=0 はスキップ（楽譜先頭に小節線は不要）
+    next_tick = next(generator)
 
     part_events: list[list[ScoreEvent]] = [[] for _ in range(n_parts)]
 
-    for tick_start in sorted_ticks:
-        while tick_start >= next_tick:
+    for event_tick in sorted_ticks:
+        while event_tick >= next_tick:
             for part_event_list in part_events:
                 part_event_list.append(BarLine())
             next_tick = next(generator)
 
-        technique, real_notes = _split_markers(groups[tick_start])
+        technique, real_notes = _split_markers(groups[event_tick])
         if not real_notes:
             continue
 
@@ -223,7 +211,7 @@ def events_to_tokens_per_part(
         chord_dur_beats = 0.0
 
         for event in real_notes:
-            note = _resolve_event(event, tick_start, ticks_per_beat, min_beats, priority, norm_info, normalize_minor, warn_label, technique)
+            note = _resolve_event(event, event_tick, ticks_per_beat, min_beats, priority, norm_info, normalize_minor, warn_label, technique)
             if note is None:
                 continue
             part_resolved[note.part_index].append(note)

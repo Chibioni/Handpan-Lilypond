@@ -62,7 +62,8 @@ class Rest(ScoreEvent):
     hidden: bool = False
 
     def to_token(self) -> Token:
-        return f"{'H' if self.hidden else 'R'}-{self.duration}"
+        prefix = "H" if self.hidden else "R"
+        return f"{prefix}-{self.duration}"
 
 
 @dataclass
