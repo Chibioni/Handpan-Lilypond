@@ -63,7 +63,7 @@ def run(args: argparse.Namespace) -> None:
             print(f"[ERROR] Scale not found: {args.scale}", file=sys.stderr)
             sys.exit(1)
         scale = SCALES[args.scale]
-        tokens = events_to_tokens(midi_data, scale, args.min_duration, args.scale, args.normalize_minor)
+        tokens = events_to_tokens(midi_data, scale, args.min_duration, args.normalize_minor)
         content = generate_score_ly(tokens, scale, args.bars_per_chunk)
     else:
         if args.ensemble not in SETS:

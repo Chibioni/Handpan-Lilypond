@@ -2,12 +2,10 @@
 
 import sys
 from collections.abc import Iterator
-from typing import Literal, NamedTuple, TypeAlias, TypeVar
-
-_LookupT = TypeVar("_LookupT")
+from typing import Literal, NamedTuple, TypeAlias
 
 from .midi_processing import MidiData, TimeSignatureChange
-from .models import MidiNoteEvent, HandpanScale, HandpanSet
+from .models import MidiNoteEvent, HandpanScale, HandpanPart, HandpanSet
 from .quantize import DUR_TO_BEATS, DurationStr, quantize
 
 # ---------------------------------------------------------------------------
@@ -34,11 +32,6 @@ _HARMONIC_INTERVALS: tuple[HarmonicInterval, ...] = (
     HarmonicInterval(semitones=12, harmonic_number=1),
     HarmonicInterval(semitones=19, harmonic_number=2),
 )
-
-
-class ScaleLookup(NamedTuple):
-    tone_field_number: int
-    harmonic: int
 
 
 class SetLookup(NamedTuple):
@@ -129,116 +122,72 @@ def _chord_token(note_tokens: list[Token]) -> Token:
     return f"< {' '.join(note_tokens)} >"
 
 
-def _minor_raised_pcs(root_midi: int) -> frozenset[int]:
-    """ナチュラルマイナーのルートから、ハーモニックマイナー・メロディックマイナーで
-    生じる「上昇した短6度・短7度」のピッチクラス集合を返す。
-
-    ナチュラルマイナーの長6度(root+9)・長7度(root+11)が
-    メロディックマイナー / ハーモニックマイナーで使われる音に対応する。
-    """
-    return frozenset({(root_midi + 9) % 12, (root_midi + 11) % 12})
+def _find_tf(midi_note: int, tonefields: list[int]) -> int | None:
+    """tonefields（MIDI ノート番号のリスト）内で midi_note を探し、インデックス（= TF 番号）を返す。"""
+    try:
+        return tonefields.index(midi_note)
+    except ValueError:
+        return None
 
 
-def _apply_minor_normalization(
-    midi_to_resolved: dict[int, _LookupT],
+def _normalize_midi_note(
+    midi_note: int,
     root_midi: int,
-) -> None:
-    """変換テーブルにナチュラルマイナー正規化エントリを追加する（in-place）。
-
-    root_midi を基準とした上昇6度・上昇7度の MIDI ノートについて、
-    1半音下（ナチュラルマイナー相当）がテーブルに存在する場合にのみ同じ値を写像する。
-    """
-    raised_pcs = _minor_raised_pcs(root_midi)
-    for midi_note in range(128):
-        if midi_note % 12 in raised_pcs and midi_note not in midi_to_resolved:
-            natural = midi_note - 1
-            if natural in midi_to_resolved:
-                midi_to_resolved[midi_note] = midi_to_resolved[natural]
+    scale_midi_set: frozenset[int],
+) -> int:
+    """ハーモニックマイナー・メロディックマイナー由来の上昇6度・上昇7度をナチュラルマイナーへ写像する。"""
+    raised_pcs = frozenset({(root_midi + 9) % 12, (root_midi + 11) % 12})
+    if midi_note % 12 in raised_pcs:
+        natural = midi_note - 1
+        if natural in scale_midi_set:
+            return natural
+    return midi_note
 
 
-def _build_scale_tables(
-    scale: HandpanScale,
-    normalize_minor: bool = False,
-) -> dict[int, ScaleLookup]:
-    """スケールから MIDI ノート番号の変換テーブルを構築する。
-
-    登録優先順位: 全 TF の基音 → 全 TF のハーモニクス1 → 全 TF のハーモニクス2。
-    先に登録された MIDI ノートは上書きされない。
-
-    Args:
-        scale: 変換対象の HandpanScale。
-        normalize_minor: True の場合、ハーモニックマイナー・メロディックマイナーの
-            上昇した短6度・短7度をナチュラルマイナーの音へ丸める。
-
-    Returns:
-        MIDI ノート番号 → ScaleLookup(トーンフィールド番号, ハーモニクス番号) の辞書。
-        基音は harmonic=0、ハーモニクス1は harmonic=1、ハーモニクス2は harmonic=2。
-    """
-    midi_to_resolved: dict[int, ScaleLookup] = {}
-    # Pass 1: 全 TF の基音を登録
-    for tone_field_number, midi in enumerate(scale.midi_notes):
-        midi_to_resolved[midi] = ScaleLookup(tone_field_number=tone_field_number, harmonic=0)
-    # Pass 2+: ハーモニクスレベル順（1 → 2）で全 TF を登録
-    for interval in _HARMONIC_INTERVALS:
-        for tone_field_number, midi in enumerate(scale.midi_notes):
-            harmonic_midi = midi + interval.semitones
-            if harmonic_midi not in midi_to_resolved:
-                midi_to_resolved[harmonic_midi] = ScaleLookup(
-                    tone_field_number=tone_field_number, harmonic=interval.harmonic_number
-                )
-    if normalize_minor:
-        _apply_minor_normalization(midi_to_resolved, scale.midi_notes[0])
-    return midi_to_resolved
+NormInfo: TypeAlias = list[tuple[int, frozenset[int]]]
 
 
-def _build_set_tables(
-    handpan_set: HandpanSet,
-    normalize_minor: bool = False,
-) -> dict[int, SetLookup]:
-    """HandpanSet から MIDI ノート番号の変換テーブルを構築する。
+def _normalize_midi(midi_note: int, norm_info: NormInfo) -> int:
+    """norm_info（ルート・到達音ペアのリスト）を順に試み、最初に正規化できた値を返す。"""
+    for root_midi, reachable in norm_info:
+        normalized = _normalize_midi_note(midi_note, root_midi, reachable)
+        if normalized != midi_note:
+            return normalized
+    return midi_note
 
-    登録優先順位:
-      (1台目基音→2台目基音→...) → (1台目ハーモニクス1→2台目ハーモニクス1→...) → (1台目ハーモニクス2→...)
-    先に登録された MIDI ノートは上書きされない。
 
-    Args:
-        handpan_set: 変換対象の HandpanSet。
-        normalize_minor: True の場合、各パートのルートを基準に
-            ハーモニックマイナー・メロディックマイナーの音をナチュラルマイナーへ丸める。
+# (tonefields, part_index, harmonic) のリスト。先頭が最高優先度。
+PriorityEntry: TypeAlias = tuple[list[int], int, int]
 
-    Returns:
-        MIDI ノート番号 → SetLookup(パートインデックス, トーンフィールド番号, ハーモニクス番号) の辞書。
-        基音は harmonic=0、ハーモニクス1は harmonic=1、ハーモニクス2は harmonic=2。
-        同じ MIDI ノートが複数パートに存在する場合は先着優先で登録し警告を出す。
-    """
-    midi_to_resolved: dict[int, SetLookup] = {}
-    # Pass 1: 全パート・全 TF の基音を登録（1台目→2台目→...の順）
-    for part_index, part in enumerate(handpan_set.parts):
-        for tone_field_number, midi in enumerate(part.scale.midi_notes):
-            if midi in midi_to_resolved:
-                first = handpan_set.parts[midi_to_resolved[midi].part_index].instrument_name
-                print(
-                    f"[WARN] Overlapping MIDI note {midi} in set: "
-                    f"{part.instrument_name} TF{tone_field_number} shadowed by {first}",
-                    file=sys.stderr,
-                )
-            else:
-                midi_to_resolved[midi] = SetLookup(
-                    part_index=part_index, tone_field_number=tone_field_number, harmonic=0
-                )
-    # Pass 2+: ハーモニクスレベル順（1 → 2）で全パート・全 TF を登録
-    for interval in _HARMONIC_INTERVALS:
-        for part_index, part in enumerate(handpan_set.parts):
-            for tone_field_number, midi in enumerate(part.scale.midi_notes):
-                harmonic_midi = midi + interval.semitones
-                if harmonic_midi not in midi_to_resolved:
-                    midi_to_resolved[harmonic_midi] = SetLookup(
-                        part_index=part_index, tone_field_number=tone_field_number, harmonic=interval.harmonic_number
-                    )
-    if normalize_minor:
-        for part in handpan_set.parts:
-            _apply_minor_normalization(midi_to_resolved, part.scale.midi_notes[0])
-    return midi_to_resolved
+
+def _scale_priority(scale: HandpanScale) -> list[PriorityEntry]:
+    """単スケール用の優先度リストを返す（基音 → ハーモニクス1 → ハーモニクス2）。part_idx は常に 0。"""
+    return [
+        (scale.midi_notes, 0, 0),
+        *[
+            ([m + interval.semitones for m in scale.midi_notes], 0, interval.harmonic_number)
+            for interval in _HARMONIC_INTERVALS
+        ],
+    ]
+
+
+def _set_priority(handpan_set: HandpanSet) -> list[PriorityEntry]:
+    """セット用の優先度リストを返す（各ハーモニクスレベルで全パートを走査）。"""
+    offsets = [(0, 0), *((i.semitones, i.harmonic_number) for i in _HARMONIC_INTERVALS)]
+    return [
+        ([m + offset for m in part.scale.midi_notes], part_idx, harmonic)
+        for offset, harmonic in offsets
+        for part_idx, part in enumerate(handpan_set.parts)
+    ]
+
+
+def _find_lookup(midi: int, priority: list[PriorityEntry]) -> SetLookup | None:
+    """priority リストを先頭から走査し、最初にヒットした SetLookup を返す。未発見は None。"""
+    for tonefields, part_idx, harmonic in priority:
+        tf_num = _find_tf(midi, tonefields)
+        if tf_num is not None:
+            return SetLookup(part_index=part_idx, tone_field_number=tf_num, harmonic=harmonic)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -359,6 +308,34 @@ def _check_duration(note: int, tick: int, beats: float, min_beats: float) -> boo
     return True
 
 
+def _resolve_event(
+    event: MidiNoteEvent,
+    tick_start: int,
+    ticks_per_beat: float,
+    min_beats: float,
+    priority: list[PriorityEntry],
+    norm_info: NormInfo,
+    normalize_minor: bool,
+    warn_label: str,
+) -> tuple[SetLookup, ResolvedNote] | None:
+    """1つの MIDI イベントを正規化 → TF 検索 → 音価検証 → ResolvedNote に変換する。
+    スキップ対象は None を返す。"""
+    midi = _normalize_midi(event.midi_note, norm_info) if normalize_minor else event.midi_note
+    lookup = _find_lookup(midi, priority)
+    if lookup is None:
+        print(f"[WARN] Skipped MIDI note {event.midi_note} at tick {tick_start}: not in {warn_label}", file=sys.stderr)
+        return None
+    beats = (event.tick_end - event.tick_start) / ticks_per_beat
+    if not _check_duration(event.midi_note, tick_start, beats, min_beats):
+        return None
+    return lookup, ResolvedNote(
+        tone_field_number=lookup.tone_field_number,
+        harmonic=lookup.harmonic,
+        articulation=_velocity_to_articulation(event.velocity),
+        duration_str=quantize(beats),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Token generation
 # ---------------------------------------------------------------------------
@@ -367,7 +344,6 @@ def events_to_tokens(
     midi_data: MidiData,
     scale: HandpanScale,
     min_duration: DurationStr = "32",
-    scale_label: str = "",
     normalize_minor: bool = False,
 ) -> list[Token]:
     """MidiData を単スケール用のハンドパン記法トークンリストに変換する。
@@ -376,56 +352,18 @@ def events_to_tokens(
         midi_data: 読み込み済みの MIDI データ。
         scale: 使用するハンドパンスケール。
         min_duration: この音価より短いノートをスキップする（例: "16", "32"）。
-        scale_label: 警告メッセージに表示するスケール名。省略時は scale.ly_name を使用。
         normalize_minor: True の場合、ハーモニックマイナー・メロディックマイナーの
             上昇した短6度・短7度をナチュラルマイナーの音へ丸める。
 
     Returns:
         ハンドパン記法トークンのリスト（例: ["1-4", "|", "< 2-8 3-8 >"]）。
     """
-    _validate_min_duration(min_duration)
-
-    midi_to_resolved = _build_scale_tables(scale, normalize_minor=normalize_minor)
-    min_beats = DUR_TO_BEATS[min_duration]
-    ticks_per_beat = midi_data.ticks_per_beat
-    label = scale_label or scale.ly_name
-
-    groups, sorted_ticks = _group_by_tick(midi_data.events)
-    generator, next_tick = _init_bar_gen(midi_data.time_sig_changes, ticks_per_beat)
-
-    tokens: list[Token] = []
-
-    for tick_start in sorted_ticks:
-        while tick_start >= next_tick:
-            tokens.append("|")
-            next_tick = next(generator)
-
-        technique, real_notes = _split_markers(groups[tick_start])
-        if not real_notes:
-            continue
-
-        resolved: list[ResolvedNote] = []
-        for event in real_notes:
-            if event.midi_note not in midi_to_resolved:
-                print(f"[WARN] Skipped MIDI note {event.midi_note} at tick {tick_start}: not in {label}", file=sys.stderr)
-                continue
-            beats = (event.tick_end - event.tick_start) / ticks_per_beat
-            if not _check_duration(event.midi_note, tick_start, beats, min_beats):
-                continue
-            lookup = midi_to_resolved[event.midi_note]
-            resolved.append(ResolvedNote(
-                tone_field_number=lookup.tone_field_number,
-                harmonic=lookup.harmonic,
-                articulation=_velocity_to_articulation(event.velocity),
-                duration_str=quantize(beats),
-            ))
-
-        if resolved:
-            chord_dur_str = max(resolved, key=lambda r: DUR_TO_BEATS[r.duration_str]).duration_str
-            note_tokens = [_note_token(r.tone_field_number, r.harmonic, technique, r.articulation, chord_dur_str) for r in resolved]
-            tokens.append(_chord_token(note_tokens))
-
-    return tokens
+    set_ = HandpanSet(
+        scale_family=scale.scale_family,
+        parts=[HandpanPart(instrument_name=scale.ly_name, scale=scale)],
+        key_signature=scale.key_signature,
+    )
+    return events_to_tokens_per_part(midi_data, set_, min_duration, normalize_minor)[0]
 
 
 def events_to_tokens_per_part(
@@ -451,7 +389,12 @@ def events_to_tokens_per_part(
     """
     _validate_min_duration(min_duration)
 
-    midi_to_resolved = _build_set_tables(handpan_set, normalize_minor=normalize_minor)
+    warn_label = handpan_set.name
+    priority = _set_priority(handpan_set)
+    norm_info: NormInfo = [
+        (part.scale.midi_notes[0], frozenset(n for tonefields, _, _ in _scale_priority(part.scale) for n in tonefields))
+        for part in handpan_set.parts
+    ]
     min_beats = DUR_TO_BEATS[min_duration]
     ticks_per_beat = midi_data.ticks_per_beat
     n_parts = len(handpan_set.parts)
@@ -475,25 +418,12 @@ def events_to_tokens_per_part(
         chord_dur_beats = 0.0
 
         for event in real_notes:
-            note = event.midi_note
-            beats = (event.tick_end - event.tick_start) / ticks_per_beat
-
-            if note not in midi_to_resolved:
-                print(f"[WARN] Skipped MIDI note {note} at tick {tick_start}: not in set", file=sys.stderr)
+            result = _resolve_event(event, tick_start, ticks_per_beat, min_beats, priority, norm_info, normalize_minor, warn_label)
+            if result is None:
                 continue
-            lookup = midi_to_resolved[note]
-
-            if not _check_duration(note, tick_start, beats, min_beats):
-                continue
-
-            duration_str = quantize(beats)
-            part_resolved[lookup.part_index].append(ResolvedNote(
-                tone_field_number=lookup.tone_field_number,
-                harmonic=lookup.harmonic,
-                articulation=_velocity_to_articulation(event.velocity),
-                duration_str=duration_str,
-            ))
-            chord_dur_beats = max(chord_dur_beats, DUR_TO_BEATS[duration_str])
+            lookup, note = result
+            part_resolved[lookup.part_index].append(note)
+            chord_dur_beats = max(chord_dur_beats, DUR_TO_BEATS[note.duration_str])
 
         if chord_dur_beats == 0.0:
             continue

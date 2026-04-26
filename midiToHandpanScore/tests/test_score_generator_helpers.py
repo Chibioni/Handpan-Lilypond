@@ -7,13 +7,15 @@ from miditohandpanscore.score_generator import (
     _velocity_to_articulation,
     _note_token,
     _chord_token,
-    _build_scale_tables,
+    _find_tf,
+    _find_lookup,
+    _normalize_midi_note,
+    _normalize_midi,
+    _scale_priority,
     _group_by_tick,
     _split_markers,
     _bar_ticks,
     _split_chunks,
-    _minor_raised_pcs,
-    _apply_minor_normalization,
 )
 
 
@@ -110,42 +112,60 @@ class TestChordToken:
 
 
 # ---------------------------------------------------------------------------
-# _build_scale_tables
+# _find_tf / _scale_priority（旧 _build_scale_tables の相当テスト）
 # ---------------------------------------------------------------------------
 
-class TestBuildScaleTables:
+def _priority_lookup(midi_note: int, scale, normalize_minor: bool = False):
+    """テスト用: priority list を使って (tf, harmonic) を返す。"""
+    priority = _scale_priority(scale)
+    all_reachable = frozenset(n for tonefields, _, _ in priority for n in tonefields)
+    norm_info = [(scale.midi_notes[0], all_reachable)]
+    midi = _normalize_midi(midi_note, norm_info) if normalize_minor else midi_note
+    result = _find_lookup(midi, priority)
+    return (result.tone_field_number, result.harmonic) if result is not None else None
+
+
+class TestFindTf:
+    def test_found(self):
+        assert _find_tf(62, [50, 57, 62, 65]) == 2
+
+    def test_not_found(self):
+        assert _find_tf(99, [50, 57, 62]) is None
+
+    def test_first_occurrence(self):
+        assert _find_tf(50, [50, 50]) == 0
+
+
+class TestScalePriority:
     def test_base_note_ding(self, kurd9):
-        table = _build_scale_tables(kurd9)
-        assert table[50] == (0, 0)  # D3 = TF0, harmonic=0
+        assert _priority_lookup(50, kurd9) == (0, 0)  # D3 = TF0, harmonic=0
 
     def test_base_note_all(self, kurd9):
-        table = _build_scale_tables(kurd9)
         expected_base = {50: 0, 57: 1, 58: 2, 60: 3, 62: 4, 64: 5, 65: 6, 67: 7, 69: 8}
         for midi, tf in expected_base.items():
-            assert table[midi] == (tf, 0)
+            assert _priority_lookup(midi, kurd9) == (tf, 0)
 
     def test_harmonic1_octave(self, kurd9):
-        table = _build_scale_tables(kurd9)
         # Bb3(58) + 12 = Bb4(70) → TF2, harmonic 1
-        assert table[70] == (2, 1)
+        assert _priority_lookup(70, kurd9) == (2, 1)
 
     def test_harmonic2(self, kurd9):
-        table = _build_scale_tables(kurd9)
         # E4(64) + 19 = B5(83) → TF5, harmonic 2
-        assert table[83] == (5, 2)
+        assert _priority_lookup(83, kurd9) == (5, 2)
         # F4(65) + 19 = C6(84) → TF6, harmonic 2
-        assert table[84] == (6, 2)
+        assert _priority_lookup(84, kurd9) == (6, 2)
 
     def test_harmonic1_priority_over_harmonic2(self, kurd9):
-        table = _build_scale_tables(kurd9)
         # F4(65)+12=F5(77) と Bb3(58)+19=F5(77) が衝突する。
-        # 全 TF ハーモニクス1 の登録が先に完了するため TF6 ハーモニクス1 が勝つ。
-        assert table[77] == (6, 1)
+        # 基音 → ハーモニクス1 → ハーモニクス2 の順なので TF6 ハーモニクス1 が勝つ。
+        assert _priority_lookup(77, kurd9) == (6, 1)
 
     def test_base_note_overrides_harmonic(self, kurd9):
         # D3(50)+19=69 は TF0 のハーモニクス2 だが、69 は TF8 (A4) の基音でもある → 基音が優先
-        table = _build_scale_tables(kurd9)
-        assert table[69] == (8, 0)
+        assert _priority_lookup(69, kurd9) == (8, 0)
+
+    def test_not_in_scale(self, kurd9):
+        assert _priority_lookup(61, kurd9) is None
 
     # normalize_minor=True のテスト
     # D Kurd 9 のルートは D3(MIDI 50)。
@@ -153,81 +173,58 @@ class TestBuildScaleTables:
 
     def test_normalize_minor_raised_7th_maps_to_natural(self, kurd9):
         # C#4 (MIDI 61) → C4 (MIDI 60) = TF3 基音
-        table = _build_scale_tables(kurd9, normalize_minor=True)
-        assert table[61] == (3, 0)
+        assert _priority_lookup(61, kurd9, normalize_minor=True) == (3, 0)
 
     def test_normalize_minor_raised_6th_maps_to_harmonic(self, kurd9):
         # B♮4 (MIDI 71) → Bb4 (MIDI 70) = TF2 ハーモニクス1
-        table = _build_scale_tables(kurd9, normalize_minor=True)
-        assert table[71] == (2, 1)
+        assert _priority_lookup(71, kurd9, normalize_minor=True) == (2, 1)
 
     def test_normalize_minor_raised_7th_higher_octave(self, kurd9):
         # C#5 (MIDI 73) → C5 (MIDI 72) = TF3 ハーモニクス1
-        table = _build_scale_tables(kurd9, normalize_minor=True)
-        assert table[73] == (3, 1)
+        assert _priority_lookup(73, kurd9, normalize_minor=True) == (3, 1)
 
     def test_normalize_minor_off_by_default(self, kurd9):
-        # normalize_minor=False（デフォルト）では C#4 はテーブルに存在しない
-        table = _build_scale_tables(kurd9)
-        assert 61 not in table
+        # normalize_minor=False（デフォルト）では C#4 はスケールにない
+        assert _priority_lookup(61, kurd9) is None
 
-    def test_normalize_minor_does_not_override_existing(self, kurd9):
-        # 既にテーブルにある MIDI ノートは上書きされない
-        table_without = _build_scale_tables(kurd9)
-        table_with = _build_scale_tables(kurd9, normalize_minor=True)
-        for midi, lookup in table_without.items():
-            assert table_with[midi] == lookup
+    def test_normalize_minor_does_not_change_existing(self, kurd9):
+        # スケール内の既存 MIDI ノートは normalize_minor=True でも変わらない
+        for midi in kurd9.midi_notes:
+            assert _priority_lookup(midi, kurd9) == _priority_lookup(midi, kurd9, normalize_minor=True)
 
 
 # ---------------------------------------------------------------------------
-# _minor_raised_pcs
+# _normalize_midi_note（旧 _minor_raised_pcs / _apply_minor_normalization の相当テスト）
 # ---------------------------------------------------------------------------
 
-class TestMinorRaisedPcs:
-    def test_d_root(self):
-        # D (PC=2): 上昇6度=11 (B♮), 上昇7度=1 (C#)
-        assert _minor_raised_pcs(50) == frozenset({11, 1})
+class TestNormalizeMidiNote:
+    def test_raised_7th_normalized(self):
+        # D ルート: C#4(61) → C4(60) がスケールにある場合
+        assert _normalize_midi_note(61, 50, frozenset({60})) == 60
 
-    def test_a_root(self):
-        # A (PC=9): 上昇6度=6 (F#), 上昇7度=8 (G#)
-        assert _minor_raised_pcs(57) == frozenset({6, 8})
-
-    def test_octave_invariant(self):
-        # オクターブが違っても同じ結果
-        assert _minor_raised_pcs(50) == _minor_raised_pcs(62)
-
-
-# ---------------------------------------------------------------------------
-# _apply_minor_normalization
-# ---------------------------------------------------------------------------
-
-class TestApplyMinorNormalization:
-    def test_raised_7th_added(self):
-        # C4(60) → TF3 がある状態で D ルートの正規化 → C#4(61) が追加される
-        table: dict[int, tuple[int, int]] = {60: (3, 0)}
-        _apply_minor_normalization(table, root_midi=50)  # D root
-        assert 61 in table
-        assert table[61] == (3, 0)
-
-    def test_raised_6th_added(self):
-        # Bb4(70) → TF2 harmonic=1 がある状態 → B♮4(71) が追加される
-        table: dict[int, tuple[int, int]] = {70: (2, 1)}
-        _apply_minor_normalization(table, root_midi=50)  # D root
-        assert 71 in table
-        assert table[71] == (2, 1)
+    def test_raised_6th_normalized(self):
+        # D ルート: B♮4(71) → Bb4(70) がスケールにある場合
+        assert _normalize_midi_note(71, 50, frozenset({70})) == 70
 
     def test_no_natural_no_mapping(self):
-        # 自然短音がテーブルにない場合は写像しない
-        table: dict[int, tuple[int, int]] = {}
-        _apply_minor_normalization(table, root_midi=50)
-        assert 61 not in table
-        assert 71 not in table
+        # ナチュラルがスケールにない場合はそのまま返す
+        assert _normalize_midi_note(61, 50, frozenset()) == 61
 
-    def test_existing_entry_not_overwritten(self):
-        # 既存エントリは上書きされない
-        table: dict[int, tuple[int, int]] = {61: (99, 0), 60: (3, 0)}
-        _apply_minor_normalization(table, root_midi=50)
-        assert table[61] == (99, 0)
+    def test_unrelated_note_unchanged(self):
+        # 上昇6度・7度でない音はそのまま返す
+        assert _normalize_midi_note(60, 50, frozenset({60})) == 60
+
+    def test_a_root_raised_6th(self):
+        # A ルート(57): 上昇6度 = F#(PC=6) → F♮
+        assert _normalize_midi_note(66, 57, frozenset({65})) == 65
+
+    def test_a_root_raised_7th(self):
+        # A ルート(57): 上昇7度 = G#(PC=8) → G♮
+        assert _normalize_midi_note(68, 57, frozenset({67})) == 67
+
+    def test_octave_invariant(self):
+        # オクターブが違っても同じ PC なら写像される
+        assert _normalize_midi_note(73, 50, frozenset({72})) == 72  # C#5 → C5
 
 
 # ---------------------------------------------------------------------------
@@ -323,26 +320,26 @@ class TestBarTicks:
 
 class TestSplitChunks:
     def test_single_chunk(self):
-        tokens = ["1-4", "2-4", "\\|", "3-4", "4-4"]
+        tokens = ["1-4", "2-4", "|", "3-4", "4-4"]
         chunks = _split_chunks(tokens, bars_per_chunk=2)
         assert len(chunks) == 1
-        assert "\\|" in chunks[0]
+        assert "|" in chunks[0]
 
     def test_two_chunks(self):
         # 4小節を bars_per_chunk=2 で分割
-        tokens = ["1-4", "\\|", "2-4", "\\|", "3-4", "\\|", "4-4"]
+        tokens = ["1-4", "|", "2-4", "|", "3-4", "|", "4-4"]
         chunks = _split_chunks(tokens, bars_per_chunk=2)
         assert len(chunks) == 2
-        assert chunks[0] == ["1-4", "\\|", "2-4"]
-        assert chunks[1] == ["3-4", "\\|", "4-4"]
+        assert chunks[0] == ["1-4", "|", "2-4"]
+        assert chunks[1] == ["3-4", "|", "4-4"]
 
     def test_chunk_boundary_bar_excluded(self):
         # チャンク境界の \\| はどちらのチャンクにも含まれない
-        tokens = ["1-4", "\\|", "2-4", "\\|", "3-4"]
+        tokens = ["1-4", "|", "2-4", "|", "3-4"]
         chunks = _split_chunks(tokens, bars_per_chunk=1)
         for chunk in chunks:
-            assert chunk[0] != "\\|"
-            assert chunk[-1] != "\\|"
+            assert chunk[0] != "|"
+            assert chunk[-1] != "|"
 
     def test_empty_tokens(self):
         assert _split_chunks([], bars_per_chunk=4) == []
