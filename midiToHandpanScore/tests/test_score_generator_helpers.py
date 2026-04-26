@@ -6,8 +6,8 @@ from miditohandpanscore.midi_processing import TimeSignatureChange
 from miditohandpanscore.score_generator import (
     Articulation,
     Technique,
+    ToneFieldNote,
     _velocity_to_articulation,
-    _note_token,
     _chord_token,
     _find_tf,
     _find_lookup,
@@ -72,27 +72,34 @@ class TestVelocityToArticulation:
 # _note_token
 # ---------------------------------------------------------------------------
 
-class TestNoteToken:
+def make_note(number: int, harmonic: int = 0, technique: Technique = Technique.NORMAL, articulation: Articulation = Articulation.NORMAL, duration: str = "4") -> ToneFieldNote:
+    return ToneFieldNote(part_index=0, number=number, harmonic=harmonic, articulation=articulation, technique=technique, duration=duration)
+
+
+class TestToneFieldNote:
     def test_plain_note(self):
-        assert _note_token(1, 0, Technique.NORMAL, Articulation.NORMAL, "4") == "1-4"
+        assert make_note(1).to_token() == "1-4"
 
     def test_with_technique(self):
-        assert _note_token(0, 0, Technique.APEX, Articulation.NORMAL, "4") == "O0-4"
+        assert make_note(0, technique=Technique.APEX).to_token() == "O0-4"
 
     def test_with_harmonic1(self):
-        assert _note_token(2, 1, Technique.NORMAL, Articulation.NORMAL, "8") == "2^1-8"
+        assert make_note(2, harmonic=1, duration="8").to_token() == "2^1-8"
 
     def test_with_harmonic2(self):
-        assert _note_token(3, 2, Technique.NORMAL, Articulation.NORMAL, "4.") == "3^2-4."
+        assert make_note(3, harmonic=2, duration="4.").to_token() == "3^2-4."
 
     def test_with_accent(self):
-        assert _note_token(1, 0, Technique.NORMAL, Articulation.ACCENT, "4") == "1!-4"
+        assert make_note(1, articulation=Articulation.ACCENT).to_token() == "1!-4"
 
     def test_with_ghost(self):
-        assert _note_token(1, 0, Technique.NORMAL, Articulation.GHOST, "8") == "1.-8"
+        assert make_note(1, articulation=Articulation.GHOST, duration="8").to_token() == "1.-8"
 
     def test_full_combination(self):
-        assert _note_token(2, 1, Technique.SLAP, Articulation.ACCENT, "4.") == "S2^1!-4."
+        assert make_note(2, harmonic=1, technique=Technique.SLAP, articulation=Articulation.ACCENT, duration="4.").to_token() == "S2^1!-4."
+
+    def test_duration_override(self):
+        assert make_note(1, duration="4").to_token("8") == "1-8"
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 import sys
 from collections.abc import Iterator
+from dataclasses import dataclass
 from enum import Enum
 from typing import NamedTuple, TypeAlias
 
@@ -29,6 +30,23 @@ class Technique(Enum):
 
 
 _TECHNIQUE_MIDI: dict[int, Technique] = {0: Technique.APEX, 1: Technique.SLAP}
+
+
+@dataclass
+class ToneFieldNote:
+    part_index: int
+    number: int
+    harmonic: int
+    articulation: Articulation
+    technique: Technique
+    duration: DurationStr
+
+    def to_token(self, duration: DurationStr | None = None) -> Token:
+        dur = duration if duration is not None else self.duration
+        token = self.technique.value + str(self.number)
+        if self.harmonic:
+            token += f"^{self.harmonic}"
+        return token + self.articulation.value + f"-{dur}"
 
 
 # ---------------------------------------------------------------------------
@@ -67,13 +85,6 @@ class BarGenState(NamedTuple):
     next_tick: int
 
 
-class ResolvedNote(NamedTuple):
-    tone_field_number: int
-    harmonic: int
-    articulation: Articulation
-    duration_str: DurationStr
-
-
 # ---------------------------------------------------------------------------
 # Low-level helpers
 # ---------------------------------------------------------------------------
@@ -92,32 +103,6 @@ def _velocity_to_articulation(velocity: int) -> Articulation:
     if 1 <= velocity <= 30:
         return Articulation.GHOST
     return Articulation.NORMAL
-
-
-def _note_token(
-    tone_field_number: int,
-    harmonic: int,
-    technique: Technique,
-    articulation: Articulation,
-    duration_str: DurationStr,
-) -> Token:
-    """単音のハンドパン記法トークン文字列を組み立てる。
-
-    Args:
-        tone_field_number: トーンフィールド番号（0 = Ding）。
-        harmonic: ハーモニクス番号（0 = 基音、1 = ^1、2 = ^2）。
-        technique: 奏法プレフィックス（"O"、"S"、または ""）。
-        articulation: アーティキュレーション（"!"、"."、または ""）。
-        duration_str: 音価文字列（例: "4", "8.", "16"）。
-
-    Returns:
-        ハンドパン記法トークン（例: "1-4", "O2!-8", "3^1-4."）。
-    """
-    token = technique.value + str(tone_field_number)
-    if harmonic:
-        token += f"^{harmonic}"
-    token += articulation.value + f"-{duration_str}"
-    return token
 
 
 def _chord_token(note_tokens: list[Token]) -> Token:
@@ -329,8 +314,9 @@ def _resolve_event(
     norm_info: NormInfo,
     normalize_minor: bool,
     warn_label: str,
-) -> tuple[SetLookup, ResolvedNote] | None:
-    """1つの MIDI イベントを正規化 → TF 検索 → 音価検証 → ResolvedNote に変換する。
+    technique: Technique,
+) -> ToneFieldNote | None:
+    """1つの MIDI イベントを正規化 → TF 検索 → 音価検証 → ToneFieldNote に変換する。
     スキップ対象は None を返す。"""
     midi = _normalize_midi(event.midi_note, norm_info) if normalize_minor else event.midi_note
     lookup = _find_lookup(midi, priority)
@@ -340,11 +326,13 @@ def _resolve_event(
     beats = (event.tick_end - event.tick_start) / ticks_per_beat
     if not _check_duration(event.midi_note, tick_start, beats, min_beats):
         return None
-    return lookup, ResolvedNote(
-        tone_field_number=lookup.tone_field_number,
+    return ToneFieldNote(
+        part_index=lookup.part_index,
+        number=lookup.tone_field_number,
         harmonic=lookup.harmonic,
         articulation=_velocity_to_articulation(event.velocity),
-        duration_str=quantize(beats),
+        technique=technique,
+        duration=quantize(beats),
     )
 
 
@@ -426,16 +414,15 @@ def events_to_tokens_per_part(
         if not real_notes:
             continue
 
-        part_resolved: list[list[ResolvedNote]] = [[] for _ in range(n_parts)]
+        part_resolved: list[list[ToneFieldNote]] = [[] for _ in range(n_parts)]
         chord_dur_beats = 0.0
 
         for event in real_notes:
-            result = _resolve_event(event, tick_start, ticks_per_beat, min_beats, priority, norm_info, normalize_minor, warn_label)
-            if result is None:
+            note = _resolve_event(event, tick_start, ticks_per_beat, min_beats, priority, norm_info, normalize_minor, warn_label, technique)
+            if note is None:
                 continue
-            lookup, note = result
-            part_resolved[lookup.part_index].append(note)
-            chord_dur_beats = max(chord_dur_beats, DUR_TO_BEATS[note.duration_str])
+            part_resolved[note.part_index].append(note)
+            chord_dur_beats = max(chord_dur_beats, DUR_TO_BEATS[note.duration])
 
         if chord_dur_beats == 0.0:
             continue
@@ -446,7 +433,7 @@ def events_to_tokens_per_part(
             if not resolved:
                 part_tokens[part_index].append(f"H-{chord_dur_str}")
             else:
-                note_tokens = [_note_token(r.tone_field_number, r.harmonic, technique, r.articulation, chord_dur_str) for r in resolved]
+                note_tokens = [n.to_token(chord_dur_str) for n in resolved]
                 part_tokens[part_index].append(_chord_token(note_tokens))
 
     return part_tokens
