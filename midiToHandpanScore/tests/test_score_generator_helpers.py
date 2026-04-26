@@ -22,9 +22,7 @@ from miditohandpanscore.score_generator import (
 from miditohandpanscore.tf_lookup import (
     find_tf,
     find_lookup,
-    normalize_midi_note,
     normalize_midi,
-    scale_priority,
     set_priority,
 )
 
@@ -161,9 +159,14 @@ class TestBarLine:
 # _find_tf / _scale_priority（旧 _build_scale_tables の相当テスト）
 # ---------------------------------------------------------------------------
 
-def _priority_lookup(midi_note: int, scale, normalize_minor: bool = False):
+def _priority_lookup(midi_note: int, scale: HandpanScale, normalize_minor: bool = False):
     """テスト用: priority list を使って (tf, harmonic) を返す。"""
-    priority = scale_priority(scale)
+    single_set = HandpanSet(
+        scale_family=scale.scale_family,
+        parts=[HandpanPart(instrument_name="test", scale=scale)],
+        key_signature=scale.key_signature,
+    )
+    priority = set_priority(single_set)
     all_reachable = frozenset(n for tonefields, _, _ in priority for n in tonefields)
     norm_info = [(scale.midi_notes[0], all_reachable)]
     midi = normalize_midi(midi_note, norm_info) if normalize_minor else midi_note
@@ -240,37 +243,30 @@ class TestScalePriority:
 
 
 # ---------------------------------------------------------------------------
-# _normalize_midi_note（旧 _minor_raised_pcs / _apply_minor_normalization の相当テスト）
+# normalize_midi（単エントリによる個別ノート変換のテスト）
 # ---------------------------------------------------------------------------
 
 class TestNormalizeMidiNote:
     def test_raised_7th_normalized(self):
-        # D ルート: C#4(61) → C4(60) がスケールにある場合
-        assert normalize_midi_note(61, 50, frozenset({60})) == 60
+        assert normalize_midi(61, [(50, frozenset({60}))]) == 60
 
     def test_raised_6th_normalized(self):
-        # D ルート: B♮4(71) → Bb4(70) がスケールにある場合
-        assert normalize_midi_note(71, 50, frozenset({70})) == 70
+        assert normalize_midi(71, [(50, frozenset({70}))]) == 70
 
     def test_no_natural_no_mapping(self):
-        # ナチュラルがスケールにない場合はそのまま返す
-        assert normalize_midi_note(61, 50, frozenset()) == 61
+        assert normalize_midi(61, [(50, frozenset())]) == 61
 
     def test_unrelated_note_unchanged(self):
-        # 上昇6度・7度でない音はそのまま返す
-        assert normalize_midi_note(60, 50, frozenset({60})) == 60
+        assert normalize_midi(60, [(50, frozenset({60}))]) == 60
 
     def test_a_root_raised_6th(self):
-        # A ルート(57): 上昇6度 = F#(PC=6) → F♮
-        assert normalize_midi_note(66, 57, frozenset({65})) == 65
+        assert normalize_midi(66, [(57, frozenset({65}))]) == 65
 
     def test_a_root_raised_7th(self):
-        # A ルート(57): 上昇7度 = G#(PC=8) → G♮
-        assert normalize_midi_note(68, 57, frozenset({67})) == 67
+        assert normalize_midi(68, [(57, frozenset({67}))]) == 67
 
     def test_octave_invariant(self):
-        # オクターブが違っても同じ PC なら写像される
-        assert normalize_midi_note(73, 50, frozenset({72})) == 72  # C#5 → C5
+        assert normalize_midi(73, [(50, frozenset({72}))]) == 72  # C#5 → C5
 
 
 # ---------------------------------------------------------------------------

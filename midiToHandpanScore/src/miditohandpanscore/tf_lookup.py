@@ -2,7 +2,7 @@
 
 from typing import NamedTuple, TypeAlias
 
-from .models import HandpanScale, HandpanSet
+from .models import HandpanSet
 
 
 class HarmonicInterval(NamedTuple):
@@ -37,38 +37,18 @@ def find_tf(midi_note: int, tonefields: list[int]) -> int | None:
         return None
 
 
-def normalize_midi_note(
-    midi_note: int,
-    root_midi: int,
-    scale_midi_set: frozenset[int],
-) -> int:
-    """ハーモニックマイナー・メロディックマイナー由来の上昇6度・上昇7度をナチュラルマイナーへ写像する。"""
-    raised_pcs = frozenset({(root_midi + 9) % 12, (root_midi + 11) % 12})
-    if midi_note % 12 in raised_pcs:
-        natural = midi_note - 1
-        if natural in scale_midi_set:
-            return natural
-    return midi_note
-
-
 def normalize_midi(midi_note: int, norm_info: NormInfo) -> int:
-    """norm_info を順に試み、最初に正規化できた値を返す。"""
+    """ハーモニックマイナー・メロディックマイナー由来の上昇6度・上昇7度をナチュラルマイナーへ写像する。
+
+    norm_info を順に試み、最初に正規化できた値を返す。対象外はそのまま返す。
+    """
     for root_midi, reachable in norm_info:
-        normalized = normalize_midi_note(midi_note, root_midi, reachable)
-        if normalized != midi_note:
-            return normalized
+        raised_pcs = frozenset({(root_midi + 9) % 12, (root_midi + 11) % 12})
+        if midi_note % 12 in raised_pcs:
+            natural = midi_note - 1
+            if natural in reachable:
+                return natural
     return midi_note
-
-
-def scale_priority(scale: HandpanScale) -> list[PriorityEntry]:
-    """単スケール用の優先度リストを返す（基音 → ハーモニクス1 → ハーモニクス2）。part_idx は常に 0。"""
-    return [
-        (scale.midi_notes, 0, 0),
-        *[
-            ([m + interval.semitones for m in scale.midi_notes], 0, interval.harmonic_number)
-            for interval in _HARMONIC_INTERVALS
-        ],
-    ]
 
 
 def set_priority(handpan_set: HandpanSet) -> list[PriorityEntry]:
@@ -79,6 +59,18 @@ def set_priority(handpan_set: HandpanSet) -> list[PriorityEntry]:
         for offset, harmonic in offsets
         for part_idx, part in enumerate(handpan_set.parts)
     ]
+
+
+def build_norm_info(handpan_set: HandpanSet, priority: list[PriorityEntry]) -> NormInfo:
+    """各パートの正規化情報（ルート音・到達可能ノート集合）を構築する。"""
+    norm_info: NormInfo = []
+    for part_idx, part in enumerate(handpan_set.parts):
+        reachable: set[int] = set()
+        for tonefields, pi, _ in priority:
+            if pi == part_idx:
+                reachable.update(tonefields)
+        norm_info.append((part.scale.midi_notes[0], frozenset(reachable)))
+    return norm_info
 
 
 def find_lookup(midi: int, priority: list[PriorityEntry]) -> SetLookup | None:

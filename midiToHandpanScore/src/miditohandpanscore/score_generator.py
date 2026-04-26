@@ -19,9 +19,9 @@ from .score_events import (
 from .tf_lookup import (
     NormInfo,
     PriorityEntry,
+    build_norm_info,
     find_lookup,
     normalize_midi,
-    scale_priority,
     set_priority,
 )
 
@@ -199,10 +199,7 @@ def events_to_tokens_per_part(
 
     warn_label = handpan_set.name
     priority = set_priority(handpan_set)
-    norm_info: NormInfo = [
-        (part.scale.midi_notes[0], frozenset(n for tonefields, _, _ in scale_priority(part.scale) for n in tonefields))
-        for part in handpan_set.parts
-    ]
+    norm_info = build_norm_info(handpan_set, priority)
     min_beats = DUR_TO_BEATS[min_duration]
     ticks_per_beat = midi_data.ticks_per_beat
     n_parts = len(handpan_set.parts)
