@@ -2,7 +2,8 @@
 
 import sys
 from collections.abc import Iterator
-from typing import Literal, NamedTuple, TypeAlias
+from enum import Enum
+from typing import NamedTuple, TypeAlias
 
 from .midi_processing import MidiData, TimeSignatureChange
 from .models import MidiNoteEvent, HandpanScale, HandpanPart, HandpanSet
@@ -13,10 +14,21 @@ from .quantize import DUR_TO_BEATS, DurationStr, quantize
 # ---------------------------------------------------------------------------
 
 Token: TypeAlias = str
-Articulation: TypeAlias = Literal["", "!", "."]
-Technique: TypeAlias = Literal["", "O", "S"]
 
-_TECHNIQUE_MIDI: dict[int, Technique] = {0: "O", 1: "S"}
+
+class Articulation(Enum):
+    NORMAL = ""
+    ACCENT = "!"
+    GHOST  = "."
+
+
+class Technique(Enum):
+    NORMAL = ""
+    APEX   = "O"
+    SLAP   = "S"
+
+
+_TECHNIQUE_MIDI: dict[int, Technique] = {0: Technique.APEX, 1: Technique.SLAP}
 
 
 # ---------------------------------------------------------------------------
@@ -76,10 +88,10 @@ def _velocity_to_articulation(velocity: int) -> Articulation:
         "!" （アクセント）、"." （ゴーストノート）、または "" （通常）。
     """
     if velocity == 127:
-        return "!"
+        return Articulation.ACCENT
     if 1 <= velocity <= 30:
-        return "."
-    return ""
+        return Articulation.GHOST
+    return Articulation.NORMAL
 
 
 def _note_token(
@@ -101,10 +113,10 @@ def _note_token(
     Returns:
         ハンドパン記法トークン（例: "1-4", "O2!-8", "3^1-4."）。
     """
-    token = technique + str(tone_field_number)
+    token = technique.value + str(tone_field_number)
     if harmonic:
         token += f"^{harmonic}"
-    token += articulation + f"-{duration_str}"
+    token += articulation.value + f"-{duration_str}"
     return token
 
 
@@ -222,7 +234,7 @@ def _split_markers(group: list[MidiNoteEvent]) -> MarkerSplit:
         technique: 奏法プレフィックス（"O"、"S"、または ""）。
         real_notes: マーカーを除いた実音ノートのリスト。
     """
-    technique: Technique = ""
+    technique: Technique = Technique.NORMAL
     real_notes: list[MidiNoteEvent] = []
     for event in group:
         if event.midi_note in _TECHNIQUE_MIDI:

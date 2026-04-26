@@ -4,6 +4,8 @@ import pytest
 from miditohandpanscore.models import MidiNoteEvent, HandpanScale
 from miditohandpanscore.midi_processing import TimeSignatureChange
 from miditohandpanscore.score_generator import (
+    Articulation,
+    Technique,
     _velocity_to_articulation,
     _note_token,
     _chord_token,
@@ -48,22 +50,22 @@ def make_event(midi_note: int, tick_start: int, tick_end: int, velocity: int = 6
 
 class TestVelocityToArticulation:
     def test_accent(self):
-        assert _velocity_to_articulation(127) == "!"
+        assert _velocity_to_articulation(127) == Articulation.ACCENT
 
     def test_ghost_lower_bound(self):
-        assert _velocity_to_articulation(1) == "."
+        assert _velocity_to_articulation(1) == Articulation.GHOST
 
     def test_ghost_upper_bound(self):
-        assert _velocity_to_articulation(30) == "."
+        assert _velocity_to_articulation(30) == Articulation.GHOST
 
     def test_normal_mid(self):
-        assert _velocity_to_articulation(64) == ""
+        assert _velocity_to_articulation(64) == Articulation.NORMAL
 
     def test_normal_just_above_ghost(self):
-        assert _velocity_to_articulation(31) == ""
+        assert _velocity_to_articulation(31) == Articulation.NORMAL
 
     def test_zero(self):
-        assert _velocity_to_articulation(0) == ""
+        assert _velocity_to_articulation(0) == Articulation.NORMAL
 
 
 # ---------------------------------------------------------------------------
@@ -72,25 +74,25 @@ class TestVelocityToArticulation:
 
 class TestNoteToken:
     def test_plain_note(self):
-        assert _note_token(1, 0, "", "", "4") == "1-4"
+        assert _note_token(1, 0, Technique.NORMAL, Articulation.NORMAL, "4") == "1-4"
 
     def test_with_technique(self):
-        assert _note_token(0, 0, "O", "", "4") == "O0-4"
+        assert _note_token(0, 0, Technique.APEX, Articulation.NORMAL, "4") == "O0-4"
 
     def test_with_harmonic1(self):
-        assert _note_token(2, 1, "", "", "8") == "2^1-8"
+        assert _note_token(2, 1, Technique.NORMAL, Articulation.NORMAL, "8") == "2^1-8"
 
     def test_with_harmonic2(self):
-        assert _note_token(3, 2, "", "", "4.") == "3^2-4."
+        assert _note_token(3, 2, Technique.NORMAL, Articulation.NORMAL, "4.") == "3^2-4."
 
     def test_with_accent(self):
-        assert _note_token(1, 0, "", "!", "4") == "1!-4"
+        assert _note_token(1, 0, Technique.NORMAL, Articulation.ACCENT, "4") == "1!-4"
 
     def test_with_ghost(self):
-        assert _note_token(1, 0, "", ".", "8") == "1.-8"
+        assert _note_token(1, 0, Technique.NORMAL, Articulation.GHOST, "8") == "1.-8"
 
     def test_full_combination(self):
-        assert _note_token(2, 1, "S", "!", "4.") == "S2^1!-4."
+        assert _note_token(2, 1, Technique.SLAP, Articulation.ACCENT, "4.") == "S2^1!-4."
 
 
 # ---------------------------------------------------------------------------
@@ -263,26 +265,26 @@ class TestSplitMarkers:
     def test_no_marker(self):
         group = [make_event(60, 0, 480)]
         technique, real_notes = _split_markers(group)
-        assert technique == ""
+        assert technique == Technique.NORMAL
         assert len(real_notes) == 1
 
     def test_apex_marker(self):
         group = [make_event(0, 0, 480), make_event(50, 0, 480)]
         technique, real_notes = _split_markers(group)
-        assert technique == "O"
+        assert technique == Technique.APEX
         assert len(real_notes) == 1
         assert real_notes[0].midi_note == 50
 
     def test_slap_marker(self):
         group = [make_event(1, 0, 480), make_event(64, 0, 480)]
         technique, real_notes = _split_markers(group)
-        assert technique == "S"
+        assert technique == Technique.SLAP
         assert len(real_notes) == 1
 
     def test_only_marker_no_notes(self):
         group = [make_event(0, 0, 480)]
         technique, real_notes = _split_markers(group)
-        assert technique == "O"
+        assert technique == Technique.APEX
         assert real_notes == []
 
 
