@@ -9,6 +9,14 @@ from typing import NamedTuple, TypeAlias
 from .midi_processing import MidiData, TimeSignatureChange
 from .models import MidiNoteEvent, HandpanScale, HandpanPart, HandpanSet
 from .quantize import DUR_TO_BEATS, DurationStr, quantize
+from .tf_lookup import (
+    NormInfo,
+    PriorityEntry,
+    find_lookup,
+    normalize_midi,
+    scale_priority,
+    set_priority,
+)
 
 # ---------------------------------------------------------------------------
 # Domain type aliases
@@ -52,23 +60,6 @@ class ToneFieldNote:
 # ---------------------------------------------------------------------------
 # Named tuples
 # ---------------------------------------------------------------------------
-
-class HarmonicInterval(NamedTuple):
-    semitones: int
-    harmonic_number: int
-
-
-_HARMONIC_INTERVALS: tuple[HarmonicInterval, ...] = (
-    HarmonicInterval(semitones=12, harmonic_number=1),
-    HarmonicInterval(semitones=19, harmonic_number=2),
-)
-
-
-class SetLookup(NamedTuple):
-    part_index: int
-    tone_field_number: int
-    harmonic: int
-
 
 class GroupedEvents(NamedTuple):
     groups: dict[int, list[MidiNoteEvent]]
@@ -117,74 +108,6 @@ def _chord_token(note_tokens: list[Token]) -> Token:
     if len(note_tokens) == 1:
         return note_tokens[0]
     return f"< {' '.join(note_tokens)} >"
-
-
-def _find_tf(midi_note: int, tonefields: list[int]) -> int | None:
-    """tonefields（MIDI ノート番号のリスト）内で midi_note を探し、インデックス（= TF 番号）を返す。"""
-    try:
-        return tonefields.index(midi_note)
-    except ValueError:
-        return None
-
-
-def _normalize_midi_note(
-    midi_note: int,
-    root_midi: int,
-    scale_midi_set: frozenset[int],
-) -> int:
-    """ハーモニックマイナー・メロディックマイナー由来の上昇6度・上昇7度をナチュラルマイナーへ写像する。"""
-    raised_pcs = frozenset({(root_midi + 9) % 12, (root_midi + 11) % 12})
-    if midi_note % 12 in raised_pcs:
-        natural = midi_note - 1
-        if natural in scale_midi_set:
-            return natural
-    return midi_note
-
-
-NormInfo: TypeAlias = list[tuple[int, frozenset[int]]]
-
-
-def _normalize_midi(midi_note: int, norm_info: NormInfo) -> int:
-    """norm_info（ルート・到達音ペアのリスト）を順に試み、最初に正規化できた値を返す。"""
-    for root_midi, reachable in norm_info:
-        normalized = _normalize_midi_note(midi_note, root_midi, reachable)
-        if normalized != midi_note:
-            return normalized
-    return midi_note
-
-
-# (tonefields, part_index, harmonic) のリスト。先頭が最高優先度。
-PriorityEntry: TypeAlias = tuple[list[int], int, int]
-
-
-def _scale_priority(scale: HandpanScale) -> list[PriorityEntry]:
-    """単スケール用の優先度リストを返す（基音 → ハーモニクス1 → ハーモニクス2）。part_idx は常に 0。"""
-    return [
-        (scale.midi_notes, 0, 0),
-        *[
-            ([m + interval.semitones for m in scale.midi_notes], 0, interval.harmonic_number)
-            for interval in _HARMONIC_INTERVALS
-        ],
-    ]
-
-
-def _set_priority(handpan_set: HandpanSet) -> list[PriorityEntry]:
-    """セット用の優先度リストを返す（各ハーモニクスレベルで全パートを走査）。"""
-    offsets = [(0, 0), *((i.semitones, i.harmonic_number) for i in _HARMONIC_INTERVALS)]
-    return [
-        ([m + offset for m in part.scale.midi_notes], part_idx, harmonic)
-        for offset, harmonic in offsets
-        for part_idx, part in enumerate(handpan_set.parts)
-    ]
-
-
-def _find_lookup(midi: int, priority: list[PriorityEntry]) -> SetLookup | None:
-    """priority リストを先頭から走査し、最初にヒットした SetLookup を返す。未発見は None。"""
-    for tonefields, part_idx, harmonic in priority:
-        tf_num = _find_tf(midi, tonefields)
-        if tf_num is not None:
-            return SetLookup(part_index=part_idx, tone_field_number=tf_num, harmonic=harmonic)
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -318,8 +241,8 @@ def _resolve_event(
 ) -> ToneFieldNote | None:
     """1つの MIDI イベントを正規化 → TF 検索 → 音価検証 → ToneFieldNote に変換する。
     スキップ対象は None を返す。"""
-    midi = _normalize_midi(event.midi_note, norm_info) if normalize_minor else event.midi_note
-    lookup = _find_lookup(midi, priority)
+    midi = normalize_midi(event.midi_note, norm_info) if normalize_minor else event.midi_note
+    lookup = find_lookup(midi, priority)
     if lookup is None:
         print(f"[WARN] Skipped MIDI note {event.midi_note} at tick {tick_start}: not in {warn_label}", file=sys.stderr)
         return None
@@ -390,9 +313,9 @@ def events_to_tokens_per_part(
     _validate_min_duration(min_duration)
 
     warn_label = handpan_set.name
-    priority = _set_priority(handpan_set)
+    priority = set_priority(handpan_set)
     norm_info: NormInfo = [
-        (part.scale.midi_notes[0], frozenset(n for tonefields, _, _ in _scale_priority(part.scale) for n in tonefields))
+        (part.scale.midi_notes[0], frozenset(n for tonefields, _, _ in scale_priority(part.scale) for n in tonefields))
         for part in handpan_set.parts
     ]
     min_beats = DUR_TO_BEATS[min_duration]
@@ -437,132 +360,3 @@ def events_to_tokens_per_part(
                 part_tokens[part_index].append(_chord_token(note_tokens))
 
     return part_tokens
-
-
-# ---------------------------------------------------------------------------
-# LilyPond output
-# ---------------------------------------------------------------------------
-
-def _split_chunks(tokens: list[Token], bars_per_chunk: int) -> list[list[Token]]:
-    """トークン列を bars_per_chunk 小節ごとのチャンクに分割する。
-
-    チャンク先頭・末尾の \\| は除外する。
-
-    Args:
-        tokens: ハンドパン記法トークンのリスト（\\| を含む）。
-        bars_per_chunk: 1 チャンクあたりの小節数。
-
-    Returns:
-        チャンクのリスト。各チャンクはトークンのリスト。
-    """
-    chunks: list[list[Token]] = []
-    current: list[Token] = []
-    bar_count = 0
-
-    for token in tokens:
-        if token == "|":
-            bar_count += 1
-            if bar_count % bars_per_chunk == 0:
-                if current:
-                    chunks.append(current)
-                current = []
-            else:
-                current.append(token)
-        else:
-            current.append(token)
-
-    if current:
-        chunks.append(current)
-
-    return chunks
-
-
-def _ly_preamble(title: str, scale_name: str, key_sig: str) -> str:
-    """LilyPond ファイルのヘッダー部分を生成する。
-
-    Args:
-        title: 楽譜タイトル。
-        scale_name: スケール定義ファイル名（拡張子なし）。
-        key_sig: 調号文字列（例: "d minor"）。スペース区切りで "tonic mode"。
-
-    Returns:
-        LilyPond ヘッダー文字列。
-    """
-    return (
-        '\\version "2.24.4"\n\n'
-        '\\include "../Handpan.ily"\n'
-        f'\\include "../Scales/{scale_name}.ly"\n\n'
-        "\\score {\n"
-        "  \\header {\n"
-        f'    title = "{title}"\n'
-        "  }\n"
-        "  \\new Staff {\n"
-        "    \\clef treble\n"
-        f"    \\key {key_sig.replace(' ', ' \\')}\n"
-    )
-
-
-_LY_SUFFIX = "  }\n}\n"
-
-
-def generate_score_ly(
-    tokens: list[Token],
-    scale: HandpanScale,
-    bars_per_chunk: int = 4,
-) -> str:
-    """ハンドパン記法トークン列から単スケール用 LilyPond ファイル文字列を生成する。
-
-    Args:
-        tokens: ハンドパン記法トークンのリスト。
-        scale: 使用するハンドパンスケール。
-        bars_per_chunk: 1 行あたりの小節数。
-
-    Returns:
-        LilyPond ファイルの内容文字列。
-    """
-    chunks = _split_chunks(tokens, bars_per_chunk)
-    score_blocks = "\n    ".join(f'\\HandpanScore "{" ".join(chunk)}"' for chunk in chunks)
-    return (
-        _ly_preamble(scale.name, scale.name, scale.key_signature)
-        + f"    \\SetTranslateTable #{scale.ly_name}\n"
-        + f"    {score_blocks}\n"
-        + _LY_SUFFIX
-    )
-
-
-def generate_set_score_ly(
-    part_tokens: list[list[Token]],
-    handpan_set: HandpanSet,
-    bars_per_chunk: int = 4,
-) -> str:
-    """ハンドパン記法トークン列から HandpanSet 用 LilyPond ファイル文字列を生成する。
-
-    Args:
-        part_tokens: パートごとのトークンリスト（events_to_tokens_per_part の出力）。
-        handpan_set: 使用するハンドパンセット。
-        bars_per_chunk: 1 行あたりの小節数。
-
-    Returns:
-        LilyPond ファイルの内容文字列。
-    """
-    n_parts = len(handpan_set.parts)
-    chunks_per_part = [_split_chunks(pt, bars_per_chunk) for pt in part_tokens]
-    n_chunks = max(len(chunks) for chunks in chunks_per_part)
-
-    chunk_blocks: list[str] = []
-    for chunk_index in range(n_chunks):
-        lines = ["    <<"]
-        for part_index, part in enumerate(handpan_set.parts):
-            chunk_tokens = chunks_per_part[part_index][chunk_index] if chunk_index < len(chunks_per_part[part_index]) else []
-            lines.append(f"      \\SetTranslateTable #{part.instrument_name}")
-            lines.append(f'      \\absolute {{ \\HandpanScore "{" ".join(chunk_tokens)}" }}')
-            if part_index < n_parts - 1:
-                lines.append("      \\\\")
-        lines.append("    >>")
-        chunk_blocks.append("\n".join(lines))
-
-    return (
-        _ly_preamble(handpan_set.name, handpan_set.name, handpan_set.key_signature)
-        + "\n".join(chunk_blocks) + "\n"
-        + _LY_SUFFIX
-    )

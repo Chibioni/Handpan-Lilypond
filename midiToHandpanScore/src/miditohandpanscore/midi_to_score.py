@@ -4,14 +4,10 @@ import argparse
 import sys
 from pathlib import Path
 
+from .ly_writer import generate_score_ly, generate_set_score_ly
 from .midi_processing import read_midi
 from .scales.data import SCALES, SETS
-from .score_generator import (
-    events_to_tokens,
-    events_to_tokens_per_part,
-    generate_score_ly,
-    generate_set_score_ly,
-)
+from .score_generator import events_to_tokens, events_to_tokens_per_part
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

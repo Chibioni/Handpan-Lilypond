@@ -13,12 +13,8 @@ import pytest
 from miditohandpanscore.midi_processing import MidiData, TempoChange, TimeSignatureChange, read_midi
 from miditohandpanscore.models import HandpanPart, HandpanScale, HandpanSet, MidiNoteEvent
 from miditohandpanscore.scales.data import SCALES, SETS
-from miditohandpanscore.score_generator import (
-    events_to_tokens,
-    events_to_tokens_per_part,
-    generate_score_ly,
-    generate_set_score_ly,
-)
+from miditohandpanscore.ly_writer import generate_score_ly, generate_set_score_ly
+from miditohandpanscore.score_generator import events_to_tokens, events_to_tokens_per_part
 
 FIXTURE_MID = Path(__file__).parent / "fixtures" / "d_kurd9.mid"
 TPB = 480
