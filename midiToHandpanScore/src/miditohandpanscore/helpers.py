@@ -20,6 +20,15 @@ def _parse_note_name(name: str) -> ParsedNote:
       "#"  → +1、"b"  → -1
       "##" → +2、"x"  → +2（ダブルシャープ）
       "bb" → -2（ダブルフラット）
+
+    Args:
+        name: パース対象の音名文字列（例: "D3", "Bb3", "F#4", "Cx4"）。
+
+    Returns:
+        ParsedNote（幹音文字, 変音記号の半音数, オクターブ番号）。
+
+    Raises:
+        ValueError: 幹音が A–G 以外の場合。
     """
     name = name.strip()
     stem = name[0].upper()
@@ -52,10 +61,18 @@ def _parse_note_name(name: str) -> ParsedNote:
 
 
 def note_name_to_midi(name: str) -> int:
-    """音名文字列を MIDI ノート番号に変換。
+    """音名文字列を MIDI ノート番号に変換する。
 
-    例: "D3"→50, "Bb3"→58, "C#4"→61, "Cx4"→62, "Dbb3"→48
-    有効範囲は 0〜127（MIDI 規格）。範囲外は ValueError を送出する。
+    例: "D3" → 50、"Bb3" → 58、"C#4" → 61、"Cx4" → 62、"Dbb3" → 48
+
+    Args:
+        name: 変換対象の音名文字列（例: "D3", "F#4", "Bb3"）。
+
+    Returns:
+        MIDI ノート番号（0–127）。
+
+    Raises:
+        ValueError: 音名が不正な場合、または MIDI 範囲（0–127）外の場合。
     """
     parsed = _parse_note_name(name)
     midi = (parsed.octave + 1) * 12 + _NATURAL_SEMITONES[parsed.stem] + parsed.accidental
@@ -67,7 +84,13 @@ def note_name_to_midi(name: str) -> int:
 def note_name_to_scale_identifier(note_name: str) -> str:
     """音名文字列（オクターブ付き）からスケール識別子用プレフィックスを返す。
 
-    例: "D3"→"D", "F#3"→"F_Sharp", "Bb3"→"B_Flat", "Cx4"→"C_Sharp_Sharp"
+    例: "D3" → "D"、"F#3" → "F_Sharp"、"Bb3" → "B_Flat"、"Cx4" → "C_Sharp_Sharp"
+
+    Args:
+        note_name: 変換対象の音名文字列（例: "D3", "F#4", "Bb3"）。
+
+    Returns:
+        スケール識別子プレフィックス文字列（例: "D", "F_Sharp", "B_Flat"）。
     """
     parsed = _parse_note_name(note_name)
     parts = [parsed.stem]

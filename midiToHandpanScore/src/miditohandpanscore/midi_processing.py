@@ -44,7 +44,21 @@ class MidiData(NamedTuple):
 
 
 def _select_tracks(mid: mido.MidiFile, track_index: int | None) -> list[Any]:
-    """トラックを選択して返す。track_index が範囲外なら [ERROR] で終了。"""
+    """MIDI ファイルから処理対象トラックを選択する。
+
+    track_index が None の場合は全トラックを返す。
+    指定されたインデックスが範囲外の場合は [ERROR] を出力して終了する。
+
+    Args:
+        mid: 読み込み済みの mido.MidiFile オブジェクト。
+        track_index: 選択するトラックの 0 始まりインデックス。None の場合は全トラック。
+
+    Returns:
+        処理対象トラックのリスト。
+
+    Raises:
+        SystemExit: track_index が範囲外の場合。
+    """
     tracks: list[Any] = cast(Any, mid).tracks
     if track_index is None:
         return tracks
@@ -59,7 +73,17 @@ def _select_tracks(mid: mido.MidiFile, track_index: int | None) -> list[Any]:
 
 
 def _read_track(track: Any) -> TrackData:
-    """トラック1本を走査して TrackData を返す。"""
+    """トラック1本を走査して TrackData を返す。
+
+    デルタ tick を絶対 tick に変換しながら、note_on / note_off・
+    テンポ変化・拍子変化イベントを抽出する。
+
+    Args:
+        track: mido のトラックオブジェクト。
+
+    Returns:
+        TrackData（raw_events, tempo_changes, time_sig_changes）。
+    """
     raw_events: list[RawEvent] = []
     tempo_changes: list[TempoChange] = []
     time_sig_changes: list[TimeSignatureChange] = []
@@ -78,7 +102,24 @@ def _read_track(track: Any) -> TrackData:
 
 
 def read_midi(path: Path, track_index: int | None = None) -> MidiData:
-    """MIDI ファイルを読み込んで MidiData を返す。Format 2 は [ERROR] で終了。"""
+    """MIDI ファイルを読み込んで MidiData に変換する。
+
+    複数トラックのイベントをマージし、ノートオン〜ノートオフのペアを
+    MidiNoteEvent に変換する。ノートオフが来ない場合は最終イベントの
+    tick をノートオフとして扱う。
+    テンポ・拍子情報が存在しない場合はデフォルト値（120 BPM / 4/4拍子）を補完する。
+
+    Args:
+        path: 読み込む MIDI ファイルのパス。
+        track_index: 読み込むトラックの 0 始まりインデックス。
+            None の場合は全トラックをマージする。
+
+    Returns:
+        MidiData（ticks_per_beat, events, tempo_changes, time_sig_changes）。
+
+    Raises:
+        SystemExit: MIDI Format 2 のファイルや track_index が範囲外の場合。
+    """
     mid = mido.MidiFile(str(path))
 
     if mid.type == 2:

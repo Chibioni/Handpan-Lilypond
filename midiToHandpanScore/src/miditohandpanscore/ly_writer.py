@@ -7,9 +7,17 @@ _LY_SUFFIX = "  }\n}\n"
 
 
 def _split_chunks(events: list[ScoreEvent], bars_per_chunk: int) -> list[list[ScoreEvent]]:
-    """イベント列を bars_per_chunk 小節ごとのチャンクに分割する。
+    """ScoreEvent リストを bars_per_chunk 小節ごとのチャンクに分割する。
 
-    チャンク境界の BarLine は除外する。
+    チャンク境界となる BarLine はどちらのチャンクにも含まれない。
+    チャンク内の BarLine（境界以外）はそのまま残る。
+
+    Args:
+        events: 分割対象の ScoreEvent リスト。
+        bars_per_chunk: 1チャンクあたりの小節数。
+
+    Returns:
+        チャンクのリスト。各チャンクは ScoreEvent のリスト。
     """
     chunks: list[list[ScoreEvent]] = []
     current: list[ScoreEvent] = []
@@ -34,7 +42,16 @@ def _split_chunks(events: list[ScoreEvent], bars_per_chunk: int) -> list[list[Sc
 
 
 def _ly_preamble(title: str, scale_name: str, key_sig: str) -> str:
-    """LilyPond ファイルのヘッダー部分を生成する。"""
+    """LilyPond ファイルのヘッダー部分を生成する。
+
+    Args:
+        title: 楽譜タイトル（\\header の title に使用）。
+        scale_name: スケール定義ファイル名（拡張子なし、\\include パスに使用）。
+        key_sig: 調号文字列（例: "d minor"）。スペース区切りで "tonic mode" の形式。
+
+    Returns:
+        \\version から \\key 行までの LilyPond ヘッダー文字列。
+    """
     return (
         '\\version "2.24.4"\n\n'
         '\\include "../Handpan.ily"\n'
@@ -54,7 +71,16 @@ def generate_score_ly(
     scale: HandpanScale,
     bars_per_chunk: int = 4,
 ) -> str:
-    """ScoreEvent リストから単スケール用 LilyPond ファイル文字列を生成する。"""
+    """ScoreEvent リストから単スケール用 LilyPond ファイル文字列を生成する。
+
+    Args:
+        events: events_to_tokens の出力。ScoreEvent のリスト。
+        scale: 使用するハンドパンスケール。
+        bars_per_chunk: 1行（1 \\HandpanScore ブロック）あたりの小節数。
+
+    Returns:
+        LilyPond ファイルの内容文字列（.ly ファイルとしてそのまま書き出せる）。
+    """
     chunks = _split_chunks(events, bars_per_chunk)
     score_blocks = "\n    ".join(
         f'\\HandpanScore "{" ".join(e.to_token() for e in chunk)}"'
@@ -73,7 +99,18 @@ def generate_set_score_ly(
     handpan_set: HandpanSet,
     bars_per_chunk: int = 4,
 ) -> str:
-    """ScoreEvent リストから HandpanSet 用 LilyPond ファイル文字列を生成する。"""
+    """ScoreEvent リストから HandpanSet 用 LilyPond ファイル文字列を生成する。
+
+    各チャンクを << ... >> ブロックで囲み、パートを \\\\ で区切る。
+
+    Args:
+        part_events: events_to_tokens_per_part の出力。パートごとの ScoreEvent リスト。
+        handpan_set: 使用するハンドパンセット。
+        bars_per_chunk: 1チャンクあたりの小節数。
+
+    Returns:
+        LilyPond ファイルの内容文字列（.ly ファイルとしてそのまま書き出せる）。
+    """
     n_parts = len(handpan_set.parts)
     chunks_per_part = [_split_chunks(pe, bars_per_chunk) for pe in part_events]
     n_chunks = max(len(chunks) for chunks in chunks_per_part)

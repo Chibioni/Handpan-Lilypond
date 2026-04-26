@@ -11,6 +11,14 @@ from .score_generator import events_to_tokens, events_to_tokens_per_part
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """CLI 引数をパースして argparse.Namespace を返す。
+
+    Args:
+        argv: パース対象の引数リスト。None の場合は sys.argv を使用する。
+
+    Returns:
+        パース結果の argparse.Namespace。
+    """
     parser = argparse.ArgumentParser(prog="handpan-midi-to-score")
     parser.add_argument("input", metavar="input.mid", help="入力 MIDI ファイル")
 
@@ -33,6 +41,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> None:
+    """パース済み引数を受け取り、MIDI → LilyPond 変換を実行して .ly ファイルを出力する。
+
+    Args:
+        args: parse_args の戻り値。
+
+    Raises:
+        SystemExit: 入力ファイルが存在しない、スケール/セット名が未登録、
+            または --bars-per-chunk が 0 以下の場合。
+    """
     if args.bars_per_chunk <= 0:
         print("[ERROR] --bars-per-chunk must be a positive integer", file=sys.stderr)
         sys.exit(1)
@@ -74,4 +91,5 @@ def run(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    """CLI エントリポイント。引数をパースして run() に委譲する。"""
     run(parse_args())

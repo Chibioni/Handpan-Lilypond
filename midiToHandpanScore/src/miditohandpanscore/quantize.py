@@ -33,5 +33,15 @@ DUR_TO_BEATS: dict[str, float] = {entry.duration_str: entry.beats for entry in D
 
 
 def quantize(beats: float) -> DurationStr:
-    """拍数から最近傍の音価文字列を返す。"""
+    """拍数を最近傍の音価文字列に変換する。
+
+    DURATION_TABLE の中から beats との差が最小のエントリを選ぶ。
+    正確に一致するエントリがない場合は最も近い音価を返す。
+
+    Args:
+        beats: 量子化対象の拍数（例: 1.0 → "4"、0.5 → "8"）。
+
+    Returns:
+        最近傍の音価文字列（例: "4", "8.", "4.."）。
+    """
     return min(DURATION_TABLE, key=lambda entry: abs(entry.beats - beats)).duration_str
