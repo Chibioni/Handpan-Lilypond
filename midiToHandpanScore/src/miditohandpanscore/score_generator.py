@@ -100,7 +100,7 @@ def _chord_token(note_tokens: list[Token]) -> Token:
     """単音トークンのリストから和音トークンを組み立てる。
 
     Args:
-        note_tokens: 単音トークンのリスト（_note_token の出力）。
+        note_tokens: 単音トークンのリスト（ToneFieldNote.to_token() の出力）。
 
     Returns:
         単音トークン（要素が 1 つの場合）または和音トークン（例: "< 1-4 3-4 >"）。

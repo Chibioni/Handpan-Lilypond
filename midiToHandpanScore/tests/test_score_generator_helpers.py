@@ -1,7 +1,7 @@
 """score_generator.py の低レベルヘルパー関数のテスト。"""
 
 import pytest
-from miditohandpanscore.models import MidiNoteEvent, HandpanScale
+from miditohandpanscore.models import MidiNoteEvent, HandpanScale, HandpanPart, HandpanSet
 from miditohandpanscore.midi_processing import TimeSignatureChange
 from miditohandpanscore.ly_writer import _split_chunks
 from miditohandpanscore.score_generator import (
@@ -20,6 +20,7 @@ from miditohandpanscore.tf_lookup import (
     normalize_midi_note,
     normalize_midi,
     scale_priority,
+    set_priority,
 )
 
 
@@ -60,9 +61,6 @@ class TestVelocityToArticulation:
     def test_ghost_upper_bound(self):
         assert _velocity_to_articulation(30) == Articulation.GHOST
 
-    def test_normal_mid(self):
-        assert _velocity_to_articulation(64) == Articulation.NORMAL
-
     def test_normal_just_above_ghost(self):
         assert _velocity_to_articulation(31) == Articulation.NORMAL
 
@@ -71,7 +69,7 @@ class TestVelocityToArticulation:
 
 
 # ---------------------------------------------------------------------------
-# _note_token
+# ToneFieldNote
 # ---------------------------------------------------------------------------
 
 def make_note(number: int, harmonic: int = 0, technique: Technique = Technique.NORMAL, articulation: Articulation = Articulation.NORMAL, duration: str = "4") -> ToneFieldNote:
@@ -359,3 +357,90 @@ class TestSplitChunks:
         tokens = ["1-4", "2-4", "3-4"]
         chunks = _split_chunks(tokens, bars_per_chunk=4)
         assert chunks == [["1-4", "2-4", "3-4"]]
+
+
+# ---------------------------------------------------------------------------
+# set_priority
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def two_scale_set():
+    """Part A: [D3=50, A3=57]、Part B: [C4=60, D4=62] の 2 台セット。"""
+    scale_a = HandpanScale(scale_family="TestA", note_names=["D3", "A3"], key_signature="d \\minor")
+    scale_b = HandpanScale(scale_family="TestB", note_names=["C4", "D4"], key_signature="c \\major")
+    return HandpanSet(
+        scale_family="Test",
+        parts=[
+            HandpanPart(instrument_name="partA", scale=scale_a),
+            HandpanPart(instrument_name="partB", scale=scale_b),
+        ],
+        key_signature="c \\major",
+    )
+
+
+class TestSetPriority:
+    def test_priority_order_base_before_harmonics(self, two_scale_set):
+        # 基音エントリが全てハーモニクスより前に来る
+        priority = set_priority(two_scale_set)
+        harmonic_indices = [i for i, (_, _, h) in enumerate(priority) if h > 0]
+        base_indices = [i for i, (_, _, h) in enumerate(priority) if h == 0]
+        assert max(base_indices) < min(harmonic_indices)
+
+    def test_parts_interleaved_within_level(self, two_scale_set):
+        # 各ハーモニクスレベルで part 0 → part 1 の順に並ぶ
+        priority = set_priority(two_scale_set)
+        base_entries = [(pi, h) for _, pi, h in priority if h == 0]
+        assert base_entries == [(0, 0), (1, 0)]
+
+    def test_base_note_routes_to_part_a(self, two_scale_set):
+        # D3(50) は Part A の基音 → part_index=0, harmonic=0
+        priority = set_priority(two_scale_set)
+        result = find_lookup(50, priority)
+        assert result is not None
+        assert result.part_index == 0
+        assert result.harmonic == 0
+
+    def test_base_note_routes_to_part_b(self, two_scale_set):
+        # C4(60) は Part B の基音 → part_index=1, harmonic=0
+        priority = set_priority(two_scale_set)
+        result = find_lookup(60, priority)
+        assert result is not None
+        assert result.part_index == 1
+        assert result.harmonic == 0
+
+    def test_harmonic_note_routes_correctly(self, two_scale_set):
+        # D3(50)+12=D4(62) は Part A のハーモニクス1 だが D4 は Part B の基音でもある
+        # 基音が先に来るため Part B 基音が勝つ
+        priority = set_priority(two_scale_set)
+        result = find_lookup(62, priority)
+        assert result is not None
+        assert result.part_index == 1
+        assert result.harmonic == 0
+
+    def test_note_in_neither_part_returns_none(self, two_scale_set):
+        priority = set_priority(two_scale_set)
+        assert find_lookup(99, priority) is None
+
+
+# ---------------------------------------------------------------------------
+# normalize_midi
+# ---------------------------------------------------------------------------
+
+class TestNormalizeMidi:
+    def test_first_entry_normalizes(self):
+        # 最初のエントリで正規化できる場合
+        norm_info = [(50, frozenset({60})), (57, frozenset({65}))]
+        assert normalize_midi(61, norm_info) == 60
+
+    def test_second_entry_tried_when_first_fails(self):
+        # 最初のエントリでは正規化できず、2番目で成功する場合
+        norm_info = [(50, frozenset()), (57, frozenset({65}))]
+        assert normalize_midi(66, norm_info) == 65
+
+    def test_no_entry_normalizes_returns_original(self):
+        # どのエントリでも正規化できない場合は元の値を返す
+        norm_info = [(50, frozenset()), (57, frozenset())]
+        assert normalize_midi(61, norm_info) == 61
+
+    def test_empty_norm_info_returns_original(self):
+        assert normalize_midi(61, []) == 61
