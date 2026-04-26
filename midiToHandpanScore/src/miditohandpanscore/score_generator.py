@@ -1,14 +1,21 @@
-"""MidiData → Handpan notation tokens → LilyPond .ly content."""
+"""MidiData → ScoreEvent list → LilyPond .ly content."""
 
 import sys
 from collections.abc import Iterator
-from dataclasses import dataclass
-from enum import Enum
-from typing import NamedTuple, TypeAlias
+from typing import NamedTuple
 
 from .midi_processing import MidiData, TimeSignatureChange
 from .models import MidiNoteEvent, HandpanScale, HandpanPart, HandpanSet
 from .quantize import DUR_TO_BEATS, DurationStr, quantize
+from .score_events import (
+    Articulation,
+    BarLine,
+    Chord,
+    Rest,
+    ScoreEvent,
+    Technique,
+    ToneFieldNote,
+)
 from .tf_lookup import (
     NormInfo,
     PriorityEntry,
@@ -18,43 +25,7 @@ from .tf_lookup import (
     set_priority,
 )
 
-# ---------------------------------------------------------------------------
-# Domain type aliases
-# ---------------------------------------------------------------------------
-
-Token: TypeAlias = str
-
-
-class Articulation(Enum):
-    NORMAL = ""
-    ACCENT = "!"
-    GHOST  = "."
-
-
-class Technique(Enum):
-    NORMAL = ""
-    APEX   = "O"
-    SLAP   = "S"
-
-
 _TECHNIQUE_MIDI: dict[int, Technique] = {0: Technique.APEX, 1: Technique.SLAP}
-
-
-@dataclass
-class ToneFieldNote:
-    part_index: int
-    number: int
-    harmonic: int
-    articulation: Articulation
-    technique: Technique
-    duration: DurationStr
-
-    def to_token(self, duration: DurationStr | None = None) -> Token:
-        dur = duration if duration is not None else self.duration
-        token = self.technique.value + str(self.number)
-        if self.harmonic:
-            token += f"^{self.harmonic}"
-        return token + self.articulation.value + f"-{dur}"
 
 
 # ---------------------------------------------------------------------------
@@ -81,14 +52,7 @@ class BarGenState(NamedTuple):
 # ---------------------------------------------------------------------------
 
 def _velocity_to_articulation(velocity: int) -> Articulation:
-    """velocity 値をアーティキュレーション文字に変換する。
-
-    Args:
-        velocity: MIDI ノートオンの velocity（1–127）。
-
-    Returns:
-        "!" （アクセント）、"." （ゴーストノート）、または "" （通常）。
-    """
+    """velocity 値をアーティキュレーション文字に変換する。"""
     if velocity == 127:
         return Articulation.ACCENT
     if 1 <= velocity <= 30:
@@ -96,35 +60,12 @@ def _velocity_to_articulation(velocity: int) -> Articulation:
     return Articulation.NORMAL
 
 
-def _chord_token(note_tokens: list[Token]) -> Token:
-    """単音トークンのリストから和音トークンを組み立てる。
-
-    Args:
-        note_tokens: 単音トークンのリスト（ToneFieldNote.to_token() の出力）。
-
-    Returns:
-        単音トークン（要素が 1 つの場合）または和音トークン（例: "< 1-4 3-4 >"）。
-    """
-    if len(note_tokens) == 1:
-        return note_tokens[0]
-    return f"< {' '.join(note_tokens)} >"
-
-
 # ---------------------------------------------------------------------------
 # Event grouping & bar-line helpers
 # ---------------------------------------------------------------------------
 
 def _group_by_tick(events: list[MidiNoteEvent]) -> GroupedEvents:
-    """イベントリストを tick_start でグループ化する。
-
-    Args:
-        events: MidiNoteEvent のリスト。
-
-    Returns:
-        GroupedEvents(groups, sorted_ticks)。
-        groups: tick_start → MidiNoteEvent リストの辞書。
-        sorted_ticks: tick_start の昇順リスト。
-    """
+    """イベントリストを tick_start でグループ化する。"""
     groups: dict[int, list[MidiNoteEvent]] = {}
     for event in events:
         groups.setdefault(event.tick_start, []).append(event)
@@ -132,16 +73,7 @@ def _group_by_tick(events: list[MidiNoteEvent]) -> GroupedEvents:
 
 
 def _split_markers(group: list[MidiNoteEvent]) -> MarkerSplit:
-    """同一 tick のグループから奏法マーカーノートと実音ノートを分離する。
-
-    Args:
-        group: 同一 tick_start を持つ MidiNoteEvent のリスト。
-
-    Returns:
-        MarkerSplit(technique, real_notes)。
-        technique: 奏法プレフィックス（"O"、"S"、または ""）。
-        real_notes: マーカーを除いた実音ノートのリスト。
-    """
+    """同一 tick のグループから奏法マーカーノートと実音ノートを分離する。"""
     technique: Technique = Technique.NORMAL
     real_notes: list[MidiNoteEvent] = []
     for event in group:
@@ -156,15 +88,7 @@ def _bar_ticks(
     time_sig_changes: list[TimeSignatureChange],
     ticks_per_beat: int,
 ) -> Iterator[int]:
-    """拍子変化に従って小節先頭ティックを順に生成するジェネレータ。
-
-    Args:
-        time_sig_changes: 拍子変化イベントのリスト。
-        ticks_per_beat: MIDI ファイルの ticks_per_beat。
-
-    Yields:
-        各小節の先頭ティック（0, bar_len, 2*bar_len, ...）。
-    """
+    """拍子変化に従って小節先頭ティックを順に生成するジェネレータ。"""
     time_sig_index = 0
     current_tick = 0
     while True:
@@ -183,13 +107,6 @@ def _init_bar_gen(
     """小節境界ジェネレータを初期化し、最初の小節境界ティックを返す。
 
     tick=0 はスキップする（楽譜先頭に小節線は不要）。
-
-    Args:
-        time_sig_changes: 拍子変化イベントのリスト。
-        ticks_per_beat: MIDI ファイルの ticks_per_beat。
-
-    Returns:
-        BarGenState(generator, next_tick)。
     """
     generator = _bar_ticks(time_sig_changes, ticks_per_beat)
     next(generator)  # skip tick 0 — 先頭に小節線不要
@@ -207,17 +124,7 @@ def _validate_min_duration(min_duration: DurationStr) -> None:
 
 
 def _check_duration(note: int, tick: int, beats: float, min_beats: float) -> bool:
-    """音価が最小値以上かを検証する。
-
-    Args:
-        note: MIDI ノート番号（警告メッセージ用）。
-        tick: ノートの tick_start（警告メッセージ用）。
-        beats: ノートの実際の音価（拍数）。
-        min_beats: 許容する最小音価（拍数）。
-
-    Returns:
-        音価が最小値以上なら True、短すぎる場合は False。
-    """
+    """音価が最小値以上かを検証する。"""
     if beats < min_beats:
         print(
             f"[WARN] Skipped MIDI note {note} at tick {tick}: "
@@ -268,19 +175,8 @@ def events_to_tokens(
     scale: HandpanScale,
     min_duration: DurationStr = "32",
     normalize_minor: bool = False,
-) -> list[Token]:
-    """MidiData を単スケール用のハンドパン記法トークンリストに変換する。
-
-    Args:
-        midi_data: 読み込み済みの MIDI データ。
-        scale: 使用するハンドパンスケール。
-        min_duration: この音価より短いノートをスキップする（例: "16", "32"）。
-        normalize_minor: True の場合、ハーモニックマイナー・メロディックマイナーの
-            上昇した短6度・短7度をナチュラルマイナーの音へ丸める。
-
-    Returns:
-        ハンドパン記法トークンのリスト（例: ["1-4", "|", "< 2-8 3-8 >"]）。
-    """
+) -> list[ScoreEvent]:
+    """MidiData を単スケール用の ScoreEvent リストに変換する。"""
     set_ = HandpanSet(
         scale_family=scale.scale_family,
         parts=[HandpanPart(instrument_name=scale.ly_name, scale=scale)],
@@ -294,21 +190,10 @@ def events_to_tokens_per_part(
     handpan_set: HandpanSet,
     min_duration: DurationStr = "32",
     normalize_minor: bool = False,
-) -> list[list[Token]]:
-    """MidiData を HandpanSet 用のパートごとのトークンリストに変換する。
+) -> list[list[ScoreEvent]]:
+    """MidiData を HandpanSet 用のパートごとの ScoreEvent リストに変換する。
 
-    他パートが演奏する tick には H（非表示休符）を挿入して、パート間の
-    タイミングを揃える。
-
-    Args:
-        midi_data: 読み込み済みの MIDI データ。
-        handpan_set: 使用するハンドパンセット（複数台構成）。
-        min_duration: この音価より短いノートをスキップする（例: "16", "32"）。
-        normalize_minor: True の場合、各パートのルートを基準に
-            ハーモニックマイナー・メロディックマイナーの音をナチュラルマイナーへ丸める。
-
-    Returns:
-        パートごとのトークンリスト。インデックスは handpan_set.parts の順に対応。
+    他パートが演奏する tick には Rest(hidden=True) を挿入してタイミングを揃える。
     """
     _validate_min_duration(min_duration)
 
@@ -325,12 +210,12 @@ def events_to_tokens_per_part(
     groups, sorted_ticks = _group_by_tick(midi_data.events)
     generator, next_tick = _init_bar_gen(midi_data.time_sig_changes, ticks_per_beat)
 
-    part_tokens: list[list[Token]] = [[] for _ in range(n_parts)]
+    part_events: list[list[ScoreEvent]] = [[] for _ in range(n_parts)]
 
     for tick_start in sorted_ticks:
         while tick_start >= next_tick:
-            for part_token_list in part_tokens:
-                part_token_list.append("|")
+            for part_event_list in part_events:
+                part_event_list.append(BarLine())
             next_tick = next(generator)
 
         technique, real_notes = _split_markers(groups[tick_start])
@@ -354,9 +239,8 @@ def events_to_tokens_per_part(
         for part_index in range(n_parts):
             resolved = part_resolved[part_index]
             if not resolved:
-                part_tokens[part_index].append(f"H-{chord_dur_str}")
+                part_events[part_index].append(Rest(duration=chord_dur_str, hidden=True))
             else:
-                note_tokens = [n.to_token(chord_dur_str) for n in resolved]
-                part_tokens[part_index].append(_chord_token(note_tokens))
+                part_events[part_index].append(Chord(notes=resolved, duration=chord_dur_str))
 
-    return part_tokens
+    return part_events

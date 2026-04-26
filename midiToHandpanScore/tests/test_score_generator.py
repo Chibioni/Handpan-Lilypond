@@ -14,7 +14,26 @@ from miditohandpanscore.midi_processing import MidiData, TempoChange, TimeSignat
 from miditohandpanscore.models import HandpanPart, HandpanScale, HandpanSet, MidiNoteEvent
 from miditohandpanscore.scales.data import SCALES, SETS
 from miditohandpanscore.ly_writer import generate_score_ly, generate_set_score_ly
+from miditohandpanscore.score_events import (
+    Articulation,
+    BarLine,
+    Chord,
+    Rest,
+    ScoreEvent,
+    Technique,
+    ToneFieldNote,
+)
 from miditohandpanscore.score_generator import events_to_tokens, events_to_tokens_per_part
+
+
+def to_strs(events: list[ScoreEvent]) -> list[str]:
+    return [e.to_token() for e in events]
+
+
+def note_event(tf: int, dur: str = "4") -> Chord:
+    """テスト用: 指定 TF 番号の単音 Chord を返す。"""
+    note = ToneFieldNote(0, tf, 0, Articulation.NORMAL, Technique.NORMAL, dur)
+    return Chord(notes=[note], duration=dur)
 
 FIXTURE_MID = Path(__file__).parent / "fixtures" / "d_kurd9.mid"
 TPB = 480
@@ -92,31 +111,33 @@ EXPECTED_TOKENS = [
 class TestEventsToTokensFromFixture:
     def test_full_token_list(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        assert tokens == EXPECTED_TOKENS
+        assert to_strs(tokens) == EXPECTED_TOKENS
 
     def test_bar_line_count(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        assert tokens.count("|") == 3
+        assert sum(1 for e in tokens if isinstance(e, BarLine)) == 3
 
     def test_bar1_articulation(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        bar1 = tokens[: tokens.index("|")]
-        assert "1!-4" in bar1   # アクセント
-        assert "2.-4." in bar1  # ゴースト
+        strs = to_strs(tokens)
+        bar1 = strs[: strs.index("|")]
+        assert "1!-4" in bar1
+        assert "2.-4." in bar1
 
     def test_bar2_techniques(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        bars = [t for t in tokens if t != "|"]
-        bar2_start = tokens.index("|") + 1
-        bar2_end = tokens.index("|", bar2_start)
-        bar2 = tokens[bar2_start:bar2_end]
+        strs = to_strs(tokens)
+        bar2_start = strs.index("|") + 1
+        bar2_end = strs.index("|", bar2_start)
+        bar2 = strs[bar2_start:bar2_end]
         assert "O0-4" in bar2
         assert "S5-4" in bar2
 
     def test_bar3_harmonics(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        separators = [i for i, t in enumerate(tokens) if t == "|"]
-        bar3 = tokens[separators[1] + 1 : separators[2]]
+        strs = to_strs(tokens)
+        separators = [i for i, s in enumerate(strs) if s == "|"]
+        bar3 = strs[separators[1] + 1 : separators[2]]
         assert "2^1-4" in bar3
         assert "3^1-4" in bar3
         assert "5^2-4." in bar3
@@ -124,10 +145,11 @@ class TestEventsToTokensFromFixture:
 
     def test_bar4_durations(self, midi_data, kurd9):
         tokens = events_to_tokens(midi_data, kurd9)
-        bar_indices = [i for i, t in enumerate(tokens) if t == "|"]
-        bar4 = tokens[bar_indices[-1] + 1:]
-        assert "4-2" in bar4    # 2分音符
-        assert "8-4.." in bar4  # 二重付点4分
+        strs = to_strs(tokens)
+        bar_indices = [i for i, s in enumerate(strs) if s == "|"]
+        bar4 = strs[bar_indices[-1] + 1:]
+        assert "4-2" in bar4
+        assert "8-4.." in bar4
 
 
 # ---------------------------------------------------------------------------
@@ -142,10 +164,9 @@ class TestEventsToTokensMinDuration:
         assert tokens != []
 
     def test_min_duration_filters_short_note(self, kurd9, capsys):
-        # 8分音符の長さで min_duration="4"（1 beat）を指定 → スキップ
         events = [make_event(57, 0, Q // 2)]
         tokens = events_to_tokens(make_midi_data(events), kurd9, min_duration="4")
-        assert tokens == []
+        assert to_strs(tokens) == []
         assert "[WARN]" in capsys.readouterr().err
 
     def test_unknown_min_duration_exits(self, kurd9):
@@ -172,57 +193,51 @@ def two_part_set() -> HandpanSet:
 
 class TestEventsToTokensPerPart:
     def test_note_routed_to_part_a(self, two_part_set):
-        events = [make_event(62, 0, Q)]  # D4 = PartA のみ
+        events = [make_event(62, 0, Q)]
         part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
-        assert "H-" not in part_tokens[0][0]   # PartA に実音
-        assert part_tokens[1][0].startswith("H-")  # PartB は非表示休符
+        assert not part_tokens[0][0].to_token().startswith("H-")
+        assert part_tokens[1][0].to_token().startswith("H-")
 
     def test_note_routed_to_part_b(self, two_part_set):
-        events = [make_event(57, 0, Q)]  # A3 = PartB のみ
+        events = [make_event(57, 0, Q)]
         part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
-        assert part_tokens[0][0].startswith("H-")  # PartA は非表示休符
-        assert "H-" not in part_tokens[1][0]        # PartB に実音
+        assert part_tokens[0][0].to_token().startswith("H-")
+        assert not part_tokens[1][0].to_token().startswith("H-")
 
     def test_simultaneous_notes_split(self, two_part_set):
-        events = [make_event(62, 0, Q), make_event(57, 0, Q)]  # 同 tick: PartA + PartB
+        events = [make_event(62, 0, Q), make_event(57, 0, Q)]
         part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
-        assert "H-" not in part_tokens[0][0]
-        assert "H-" not in part_tokens[1][0]
+        assert not part_tokens[0][0].to_token().startswith("H-")
+        assert not part_tokens[1][0].to_token().startswith("H-")
 
     def test_hidden_rest_matches_chord_duration(self, two_part_set):
-        events = [make_event(62, 0, H)]  # D4 = PartA, 2分音符
+        events = [make_event(62, 0, H)]
         part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
-        assert part_tokens[1][0] == "H-2"
+        assert part_tokens[1][0].to_token() == "H-2"
 
     def test_bar_lines_in_all_parts(self, two_part_set):
-        events = [
-            make_event(62, 0,        Q),
-            make_event(57, Q * 4,    Q),  # 次の小節
-        ]
+        events = [make_event(62, 0, Q), make_event(57, Q * 4, Q)]
         part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
-        assert "|" in part_tokens[0]
-        assert "|" in part_tokens[1]
+        assert any(isinstance(e, BarLine) for e in part_tokens[0])
+        assert any(isinstance(e, BarLine) for e in part_tokens[1])
 
     def test_note_in_neither_part_skipped(self, two_part_set: HandpanSet, capsys: pytest.CaptureFixture[str]) -> None:
-        events = [make_event(99, 0, Q)]  # どのパートにも属さない MIDI 99
+        events = [make_event(99, 0, Q)]
         part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
         assert part_tokens == [[], []]
         assert "[WARN]" in capsys.readouterr().err
 
     def test_min_duration_filters_short_note(self, two_part_set: HandpanSet, capsys: pytest.CaptureFixture[str]) -> None:
-        events = [make_event(62, 0, Q // 2)]  # D4、8分音符 < min_duration="4"
-        part_tokens = events_to_tokens_per_part(
-            make_midi_data(events), two_part_set, min_duration="4"
-        )
+        events = [make_event(62, 0, Q // 2)]
+        part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set, min_duration="4")
         assert part_tokens == [[], []]
         assert "[WARN]" in capsys.readouterr().err
 
     def test_technique_marker_applied_to_correct_part(self, two_part_set: HandpanSet) -> None:
-        # MIDI 0 (Apex) + D4(62) → PartA に "O0-4"、PartB は非表示休符
         events = [make_event(0, 0, Q), make_event(62, 0, Q)]
         part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
-        assert part_tokens[0][0] == "O0-4"
-        assert part_tokens[1][0].startswith("H-")
+        assert part_tokens[0][0].to_token() == "O0-4"
+        assert part_tokens[1][0].to_token().startswith("H-")
 
 
 # ---------------------------------------------------------------------------
@@ -239,38 +254,32 @@ class TestEventsToTokensPerPart:
 
 class TestNormalizeMinorEventsToTokens:
     def test_raised_7th_mapped_to_natural(self, kurd9):
-        events = [make_event(61, 0, Q)]  # C#4 → C4(TF3)
+        events = [make_event(61, 0, Q)]
         tokens = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=True)
-        assert tokens == ["3-4"]
+        assert to_strs(tokens) == ["3-4"]
 
     def test_raised_6th_mapped_to_harmonic(self, kurd9):
-        events = [make_event(71, 0, Q)]  # B♮4 → Bb4 harmonic1(TF2^1)
+        events = [make_event(71, 0, Q)]
         tokens = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=True)
-        assert tokens == ["2^1-4"]
+        assert to_strs(tokens) == ["2^1-4"]
 
     def test_raised_note_skipped_without_flag(self, kurd9, capsys):
-        events = [make_event(61, 0, Q)]  # C#4: スケールにない
+        events = [make_event(61, 0, Q)]
         tokens = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=False)
-        assert tokens == []
+        assert to_strs(tokens) == []
         assert "[WARN]" in capsys.readouterr().err
 
     def test_normal_notes_unaffected(self, kurd9):
-        events = [make_event(60, 0, Q)]  # C4(TF3): 正規化の有無で変わらない
+        events = [make_event(60, 0, Q)]
         tokens_with = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=True)
         tokens_without = events_to_tokens(make_midi_data(events), kurd9, normalize_minor=False)
-        assert tokens_with == tokens_without == ["3-4"]
+        assert to_strs(tokens_with) == to_strs(tokens_without) == ["3-4"]
 
     def test_raised_note_no_natural_in_scale_skipped(self, kurd9, capsys):
-        # E Kurd 9 など C# がナチュラルマイナーにある場合は別だが、
-        # D Kurd 9 の D+9=B♮ は Bb がスケールにあるので写像される。
-        # 逆に写像先がスケールにない例として、TF 存在しない MIDI 番号を直接検証。
-        # ここでは「上昇7度だが 1半音下もスケールにない」状況を手動構築する。
         scale_no_c = HandpanScale("Test", ["D4", "E4", "F4"], "d \\minor")
-        # D4 root (PC=2): 上昇7度 = C#5 (MIDI 73), 自然7度 = C5 (MIDI 72)
-        # C5 は scale_no_c に含まれない → スキップ
         events = [make_event(73, 0, Q)]
         tokens = events_to_tokens(make_midi_data(events), scale_no_c, normalize_minor=True)
-        assert tokens == []
+        assert to_strs(tokens) == []
         assert "[WARN]" in capsys.readouterr().err
 
 
@@ -295,8 +304,8 @@ class TestNormalizeMinorEventsToTokensPerPart:
         part_tokens = events_to_tokens_per_part(
             make_midi_data(events), normalize_minor_set, normalize_minor=True
         )
-        assert "H-" not in part_tokens[0][0]       # PartA に実音
-        assert part_tokens[1][0].startswith("H-")  # PartB は非表示休符
+        assert not part_tokens[0][0].to_token().startswith("H-")
+        assert part_tokens[1][0].to_token().startswith("H-")
 
     def test_raised_note_skipped_without_flag(self, normalize_minor_set, capsys):
         # normalize_minor=False では C#4(61) はスキップ
@@ -322,14 +331,13 @@ class TestGenerateScoreLy:
         assert "\\SetTranslateTable #d_kurd9" in result
 
     def test_handpan_score_tokens(self, kurd9):
-        tokens = ["0-4", "1-4"]
-        result = generate_score_ly(tokens, kurd9)
+        events = [note_event(0), note_event(1)]
+        result = generate_score_ly(events, kurd9)
         assert '\\HandpanScore "0-4 1-4"' in result
 
     def test_chunk_split_creates_two_blocks(self, kurd9):
-        # 8小節分（bars_per_chunk=4）→ HandpanScore ブロックが 2 つ
-        tokens = ["0-4"] + ["|"] * 7 + ["1-4"]
-        result = generate_score_ly(tokens, kurd9, bars_per_chunk=4)
+        events = [note_event(0)] + [BarLine()] * 7 + [note_event(1)]
+        result = generate_score_ly(events, kurd9, bars_per_chunk=4)
         assert result.count("\\HandpanScore") == 2
 
     def test_from_fixture_midi(self, midi_data, kurd9):
@@ -349,19 +357,19 @@ class TestGenerateSetScoreLy:
         assert '\\version "2.24.4"' in result
 
     def test_both_translate_tables(self, two_part_set):
-        result = generate_set_score_ly([["0-4"], ["0-4"]], two_part_set)
+        result = generate_set_score_ly([[note_event(0)], [note_event(0)]], two_part_set)
         assert "\\SetTranslateTable #PartA" in result
         assert "\\SetTranslateTable #PartB" in result
 
     def test_simultaneous_block_markers(self, two_part_set):
-        result = generate_set_score_ly([["0-4"], ["0-4"]], two_part_set)
+        result = generate_set_score_ly([[note_event(0)], [note_event(0)]], two_part_set)
         assert "<<" in result
         assert ">>" in result
 
     def test_chunk_split_creates_two_blocks(self, two_part_set):
-        tokens_a = ["0-4"] + ["|"] * 7 + ["1-4"]
-        tokens_b = ["H-4"] + ["|"] * 7 + ["H-4"]
-        result = generate_set_score_ly([tokens_a, tokens_b], two_part_set, bars_per_chunk=4)
+        events_a = [note_event(0)] + [BarLine()] * 7 + [note_event(1)]
+        events_b = [Rest("4", hidden=True)] + [BarLine()] * 7 + [Rest("4", hidden=True)]
+        result = generate_set_score_ly([events_a, events_b], two_part_set, bars_per_chunk=4)
         assert result.count("<<") == 2
 
     def test_scale_include_present(self, two_part_set: HandpanSet) -> None:
@@ -369,7 +377,7 @@ class TestGenerateSetScoreLy:
         assert '\\include "../Scales/' in result
 
     def test_handpan_score_tokens_per_part(self, two_part_set: HandpanSet) -> None:
-        result = generate_set_score_ly([["0-4"], ["1-4"]], two_part_set)
+        result = generate_set_score_ly([[note_event(0)], [note_event(1)]], two_part_set)
         assert result.count("\\HandpanScore") == 2
         assert '"0-4"' in result
         assert '"1-4"' in result

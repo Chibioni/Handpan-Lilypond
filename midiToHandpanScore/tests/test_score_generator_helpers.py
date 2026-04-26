@@ -4,12 +4,17 @@ import pytest
 from miditohandpanscore.models import MidiNoteEvent, HandpanScale, HandpanPart, HandpanSet
 from miditohandpanscore.midi_processing import TimeSignatureChange
 from miditohandpanscore.ly_writer import _split_chunks
-from miditohandpanscore.score_generator import (
+from miditohandpanscore.score_events import (
     Articulation,
+    BarLine,
+    Chord,
+    Rest,
+    ScoreEvent,
     Technique,
     ToneFieldNote,
+)
+from miditohandpanscore.score_generator import (
     _velocity_to_articulation,
-    _chord_token,
     _group_by_tick,
     _split_markers,
     _bar_ticks,
@@ -22,6 +27,10 @@ from miditohandpanscore.tf_lookup import (
     scale_priority,
     set_priority,
 )
+
+
+def to_strs(events: list[ScoreEvent]) -> list[str]:
+    return [e.to_token() for e in events]
 
 
 # ---------------------------------------------------------------------------
@@ -103,21 +112,49 @@ class TestToneFieldNote:
 
 
 # ---------------------------------------------------------------------------
-# _chord_token
+# Chord
 # ---------------------------------------------------------------------------
 
-class TestChordToken:
+class TestChord:
     def test_single_note_passthrough(self):
-        assert _chord_token(["1-4"]) == "1-4"
+        chord = Chord(notes=[make_note(1)], duration="4")
+        assert chord.to_token() == "1-4"
 
     def test_two_note_chord(self):
-        assert _chord_token(["1-4", "3-4"]) == "< 1-4 3-4 >"
+        chord = Chord(notes=[make_note(1), make_note(3)], duration="4")
+        assert chord.to_token() == "< 1-4 3-4 >"
 
     def test_three_note_chord(self):
-        assert _chord_token(["1-4", "3-4", "5-4"]) == "< 1-4 3-4 5-4 >"
+        chord = Chord(notes=[make_note(1), make_note(3), make_note(5)], duration="4")
+        assert chord.to_token() == "< 1-4 3-4 5-4 >"
 
     def test_with_technique(self):
-        assert _chord_token(["O1-4", "O3-4"]) == "< O1-4 O3-4 >"
+        chord = Chord(notes=[make_note(1, technique=Technique.APEX), make_note(3, technique=Technique.APEX)], duration="4")
+        assert chord.to_token() == "< O1-4 O3-4 >"
+
+    def test_duration_overrides_note_duration(self):
+        chord = Chord(notes=[make_note(1, duration="8")], duration="4")
+        assert chord.to_token() == "1-4"
+
+
+# ---------------------------------------------------------------------------
+# Rest / BarLine
+# ---------------------------------------------------------------------------
+
+class TestRest:
+    def test_visible_rest(self):
+        assert Rest(duration="4").to_token() == "R-4"
+
+    def test_hidden_rest(self):
+        assert Rest(duration="2", hidden=True).to_token() == "H-2"
+
+    def test_dotted_rest(self):
+        assert Rest(duration="4.").to_token() == "R-4."
+
+
+class TestBarLine:
+    def test_to_token(self):
+        assert BarLine().to_token() == "|"
 
 
 # ---------------------------------------------------------------------------
@@ -327,36 +364,38 @@ class TestBarTicks:
 # _split_chunks
 # ---------------------------------------------------------------------------
 
+def _r(dur: str = "4") -> Rest:
+    return Rest(duration=dur)
+
+
 class TestSplitChunks:
     def test_single_chunk(self):
-        tokens = ["1-4", "2-4", "|", "3-4", "4-4"]
-        chunks = _split_chunks(tokens, bars_per_chunk=2)
+        events = [_r(), _r(), BarLine(), _r(), _r()]
+        chunks = _split_chunks(events, bars_per_chunk=2)
         assert len(chunks) == 1
-        assert "|" in chunks[0]
+        assert any(isinstance(e, BarLine) for e in chunks[0])
 
     def test_two_chunks(self):
-        # 4小節を bars_per_chunk=2 で分割
-        tokens = ["1-4", "|", "2-4", "|", "3-4", "|", "4-4"]
-        chunks = _split_chunks(tokens, bars_per_chunk=2)
+        events = [_r(), BarLine(), _r(), BarLine(), _r(), BarLine(), _r()]
+        chunks = _split_chunks(events, bars_per_chunk=2)
         assert len(chunks) == 2
-        assert chunks[0] == ["1-4", "|", "2-4"]
-        assert chunks[1] == ["3-4", "|", "4-4"]
+        assert to_strs(chunks[0]) == ["R-4", "|", "R-4"]
+        assert to_strs(chunks[1]) == ["R-4", "|", "R-4"]
 
     def test_chunk_boundary_bar_excluded(self):
-        # チャンク境界の \\| はどちらのチャンクにも含まれない
-        tokens = ["1-4", "|", "2-4", "|", "3-4"]
-        chunks = _split_chunks(tokens, bars_per_chunk=1)
+        events = [_r(), BarLine(), _r(), BarLine(), _r()]
+        chunks = _split_chunks(events, bars_per_chunk=1)
         for chunk in chunks:
-            assert chunk[0] != "|"
-            assert chunk[-1] != "|"
+            assert not isinstance(chunk[0], BarLine)
+            assert not isinstance(chunk[-1], BarLine)
 
     def test_empty_tokens(self):
         assert _split_chunks([], bars_per_chunk=4) == []
 
     def test_no_bar_lines(self):
-        tokens = ["1-4", "2-4", "3-4"]
-        chunks = _split_chunks(tokens, bars_per_chunk=4)
-        assert chunks == [["1-4", "2-4", "3-4"]]
+        events = [_r(), _r(), _r()]
+        chunks = _split_chunks(events, bars_per_chunk=4)
+        assert to_strs(chunks[0]) == ["R-4", "R-4", "R-4"]
 
 
 # ---------------------------------------------------------------------------
