@@ -27,7 +27,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     mode.add_argument("--ensemble", metavar="SET_NAME", help="セット名 (例: f_sharp_minor18)")
 
     parser.add_argument("--output", metavar="FILE", help="出力 .ly ファイルパス")
-    parser.add_argument("--tempo", type=float, metavar="BPM", help="BPM 上書き")
     parser.add_argument("--min-duration", default="32", metavar="DUR", help="最小音価 (デフォルト: 32)")
     parser.add_argument("--bars-per-chunk", type=int, default=4, metavar="N", help="チャンクあたりの小節数")
     parser.add_argument(
@@ -62,13 +61,8 @@ def run(args: argparse.Namespace) -> None:
 
     midi_data = read_midi(input_path)
 
-    if args.tempo:
-        bpm = args.tempo
-        print(f"[INFO] Tempo: {bpm:.0f} BPM (overridden)", file=sys.stderr)
-    else:
-        tempo_us = midi_data.tempo_changes[0].tempo
-        bpm = round(60_000_000 / tempo_us)
-        print(f"[INFO] Tempo: {bpm} BPM (from MIDI)", file=sys.stderr)
+    bpm = round(60_000_000 / midi_data.tempo_changes[0].tempo)
+    print(f"[INFO] Tempo: {bpm} BPM", file=sys.stderr)
 
     if args.scale:
         if args.scale not in SCALES:

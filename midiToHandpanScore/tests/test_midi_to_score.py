@@ -23,7 +23,6 @@ def make_args(**kwargs) -> argparse.Namespace:
         scale="d_kurd9",
         ensemble=None,
         output=None,
-        tempo=None,
         min_duration="32",
         bars_per_chunk=4,
         normalize_minor=False,
@@ -67,10 +66,6 @@ class TestParseArgs:
         args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9"])
         assert args.min_duration == "32"
 
-    def test_tempo_parsed_as_float(self):
-        args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9", "--tempo", "90"])
-        assert args.tempo == 90.0
-
     def test_normalize_minor_default_false(self):
         args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9"])
         assert args.normalize_minor is False
@@ -113,19 +108,11 @@ class TestRunScaleMode:
         with pytest.raises(SystemExit):
             run(make_args(scale="unknown_scale", output=str(out)))
 
-    def test_tempo_override_in_stderr(self, tmp_path, capsys):
-        out = tmp_path / "out.ly"
-        run(make_args(tempo=90.0, output=str(out)))
-        err = capsys.readouterr().err
-        assert "90 BPM" in err
-        assert "overridden" in err
-
-    def test_tempo_from_midi_in_stderr(self, tmp_path, capsys):
+    def test_tempo_in_stderr(self, tmp_path, capsys):
         out = tmp_path / "out.ly"
         run(make_args(output=str(out)))
         err = capsys.readouterr().err
         assert "120 BPM" in err
-        assert "from MIDI" in err
 
     def test_bars_per_chunk_splits_output(self, tmp_path):
         out = tmp_path / "out.ly"
