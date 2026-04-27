@@ -64,14 +64,15 @@ class HandpanScale:
     @property
     def name(self) -> str:
         """スケールの識別名を返す（例: "D_Kurd9"）。"""
+        ding_id = note_name_to_scale_identifier(self.note_names[0])
         family = self.scale_family.replace(" ", "_")
-        return f"{note_name_to_scale_identifier(self.note_names[0])}_{family}{len(self.note_names)}"
+        note_count = len(self.note_names)
+        return f"{ding_id}_{family}{note_count}"
 
     @property
     def ly_name(self) -> str:
         """LilyPond 変数名として使うスネークケース識別子を返す（例: "d_kurd9"）。"""
-        family_slug = self.scale_family.lower().replace(" ", "_")
-        return f"{note_name_to_scale_identifier(self.note_names[0]).lower()}_{family_slug}{len(self.note_names)}"
+        return self.name.lower()
 
     @property
     def ly_pitches(self) -> list[int]:
@@ -124,7 +125,10 @@ class HandpanSet:
         Returns:
             指定パートの各音の N 値リスト。
         """
-        all_midis = sorted(set(midi_note for part in self.parts for midi_note in part.scale.midi_notes))
+        all_midi_set: set[int] = set()
+        for part in self.parts:
+            all_midi_set.update(part.scale.midi_notes)
+        all_midis = sorted(all_midi_set)
         ding = self.parts[0].scale.midi_notes[0]
         position_map = _build_position_map(ding, all_midis)
         return [position_map[midi_note] for midi_note in self.parts[part_index].scale.midi_notes]

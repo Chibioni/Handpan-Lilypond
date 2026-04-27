@@ -60,10 +60,13 @@ def normalize_midi(midi_note: int, norm_info: NormInfo) -> int:
     """
     for root_midi, reachable in norm_info:
         raised_pcs = frozenset({(root_midi + 9) % 12, (root_midi + 11) % 12})
-        if midi_note % 12 in raised_pcs:
-            natural = midi_note - 1
-            if natural in reachable:
-                return natural
+        if midi_note % 12 not in raised_pcs:
+            continue
+
+        natural = midi_note - 1
+        if natural in reachable:
+            return natural
+
     return midi_note
 
 
@@ -79,12 +82,13 @@ def set_priority(handpan_set: HandpanSet) -> list[PriorityEntry]:
     Returns:
         (tonefields, part_index, harmonic) のリスト。先頭ほど優先度が高い。
     """
-    offsets = [(0, 0), *((i.semitones, i.harmonic_number) for i in _HARMONIC_INTERVALS)]
-    return [
-        ([m + offset for m in part.scale.midi_notes], part_idx, harmonic)
-        for offset, harmonic in offsets
-        for part_idx, part in enumerate(handpan_set.parts)
-    ]
+    offsets = [(0, 0)] + [(i.semitones, i.harmonic_number) for i in _HARMONIC_INTERVALS]
+    result: list[PriorityEntry] = []
+    for offset, harmonic in offsets:
+        for part_idx, part in enumerate(handpan_set.parts):
+            tonefields = [m + offset for m in part.scale.midi_notes]
+            result.append((tonefields, part_idx, harmonic))
+    return result
 
 
 def build_norm_info(handpan_set: HandpanSet, priority: list[PriorityEntry]) -> NormInfo:
