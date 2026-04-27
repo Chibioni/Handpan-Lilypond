@@ -25,7 +25,6 @@ def make_args(**kwargs) -> argparse.Namespace:
         output=None,
         tempo=None,
         min_duration="32",
-        track=None,
         bars_per_chunk=4,
         normalize_minor=False,
     )
@@ -71,10 +70,6 @@ class TestParseArgs:
     def test_tempo_parsed_as_float(self):
         args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9", "--tempo", "90"])
         assert args.tempo == 90.0
-
-    def test_track_parsed_as_int(self):
-        args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9", "--track", "1"])
-        assert args.track == 1
 
     def test_normalize_minor_default_false(self):
         args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9"])

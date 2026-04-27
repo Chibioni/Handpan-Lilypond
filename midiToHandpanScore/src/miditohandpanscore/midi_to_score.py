@@ -29,7 +29,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", metavar="FILE", help="出力 .ly ファイルパス")
     parser.add_argument("--tempo", type=float, metavar="BPM", help="BPM 上書き")
     parser.add_argument("--min-duration", default="32", metavar="DUR", help="最小音価 (デフォルト: 32)")
-    parser.add_argument("--track", type=int, metavar="N", help="トラック番号 (0始まり)")
     parser.add_argument("--bars-per-chunk", type=int, default=4, metavar="N", help="チャンクあたりの小節数")
     parser.add_argument(
         "--normalize-minor",
@@ -61,7 +60,7 @@ def run(args: argparse.Namespace) -> None:
 
     output_path = Path(args.output) if args.output else input_path.with_suffix(".ly")
 
-    midi_data = read_midi(input_path, track_index=args.track)
+    midi_data = read_midi(input_path)
 
     if args.tempo:
         bpm = args.tempo

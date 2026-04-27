@@ -43,33 +43,6 @@ class MidiData(NamedTuple):
     time_sig_changes: list[TimeSignatureChange]
 
 
-def _select_tracks(mid: mido.MidiFile, track_index: int | None) -> list[Any]:
-    """MIDI ファイルから処理対象トラックを選択する。
-
-    track_index が None の場合は全トラックを返す。
-    指定されたインデックスが範囲外の場合は [ERROR] を出力して終了する。
-
-    Args:
-        mid: 読み込み済みの mido.MidiFile オブジェクト。
-        track_index: 選択するトラックの 0 始まりインデックス。None の場合は全トラック。
-
-    Returns:
-        処理対象トラックのリスト。
-
-    Raises:
-        SystemExit: track_index が範囲外の場合。
-    """
-    tracks: list[Any] = cast(Any, mid).tracks
-    if track_index is None:
-        return tracks
-    if track_index >= len(tracks):
-        print(
-            f"[ERROR] Track {track_index} not found "
-            f"(file has {len(tracks)} tracks)",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return [tracks[track_index]]
 
 
 def _read_track(track: Any) -> TrackData:
@@ -101,24 +74,27 @@ def _read_track(track: Any) -> TrackData:
     return TrackData(raw_events=raw_events, tempo_changes=tempo_changes, time_sig_changes=time_sig_changes)
 
 
-def read_midi(path: Path, track_index: int | None = None) -> MidiData:
+def _is_note_off(msg: Any) -> bool:
+    return msg.type == "note_off" or msg.velocity == 0
+
+
+def read_midi(path: Path) -> MidiData:
     """MIDI ファイルを読み込んで MidiData に変換する。
 
-    複数トラックのイベントをマージし、ノートオン〜ノートオフのペアを
-    MidiNoteEvent に変換する。ノートオフが来ない場合は最終イベントの
-    tick をノートオフとして扱う。
+    音符イベント（note_on / note_off）を持つトラックを「音符トラック」とみなす。
+    音符トラックが 2本以上の場合はエラーで終了する。
+    テンポ・拍子情報は全トラックから収集する。
+    ノートオフが来ない場合は最終イベントの tick をノートオフとして扱う。
     テンポ・拍子情報が存在しない場合はデフォルト値（120 BPM / 4/4拍子）を補完する。
 
     Args:
         path: 読み込む MIDI ファイルのパス。
-        track_index: 読み込むトラックの 0 始まりインデックス。
-            None の場合は全トラックをマージする。
 
     Returns:
         MidiData（ticks_per_beat, events, tempo_changes, time_sig_changes）。
 
     Raises:
-        SystemExit: MIDI Format 2 のファイルや track_index が範囲外の場合。
+        SystemExit: MIDI Format 2 のファイルや音符トラックが複数ある場合。
     """
     mid = mido.MidiFile(str(path))
 
@@ -126,63 +102,74 @@ def read_midi(path: Path, track_index: int | None = None) -> MidiData:
         print("[ERROR] MIDI Format 2 is not supported", file=sys.stderr)
         sys.exit(1)
 
-    raw_events: list[RawEvent] = []
+    all_track_data = [_read_track(track) for track in cast(Any, mid).tracks]
+    note_tracks = [td for td in all_track_data if td.raw_events]
+
+    if len(note_tracks) > 1:
+        print(
+            f"[ERROR] {len(note_tracks)} note tracks found. "
+            "Only single note-track MIDI files are supported.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     tempo_changes: list[TempoChange] = []
     time_sig_changes: list[TimeSignatureChange] = []
+    for td in all_track_data:
+        tempo_changes.extend(td.tempo_changes)
+        time_sig_changes.extend(td.time_sig_changes)
 
-    for track in _select_tracks(mid, track_index):
-        track_data = _read_track(track)
-        raw_events.extend(track_data.raw_events)
-        tempo_changes.extend(track_data.tempo_changes)
-        time_sig_changes.extend(track_data.time_sig_changes)
+    if not tempo_changes:
+        tempo_changes.append(TempoChange(tick=0, tempo=500_000))
+    if not time_sig_changes:
+        time_sig_changes.append(TimeSignatureChange(tick=0, numerator=4, denominator=4))
+    tempo_changes.sort(key=lambda tc: tc.tick)
+    time_sig_changes.sort(key=lambda tsc: tsc.tick)
+
+    raw_events: list[RawEvent] = note_tracks[0].raw_events if note_tracks else []
+    if not raw_events:
+        return MidiData(
+            ticks_per_beat=mid.ticks_per_beat,
+            events=[],
+            tempo_changes=tempo_changes,
+            time_sig_changes=time_sig_changes,
+        )
 
     # note_off (or note_on vel=0) before note_on at the same tick
-    raw_events.sort(
-        key=lambda event: (
-            event.abs_tick,
-            0 if (event.msg.type == "note_off" or event.msg.velocity == 0) else 1,
-        )
-    )
+    raw_events.sort(key=lambda event: (event.abs_tick, not _is_note_off(event.msg)))
 
     pending: dict[int, list[PendingNote]] = {}
     note_events: list[MidiNoteEvent] = []
 
     for abs_tick, msg in raw_events:
-        note: int = msg.note
-        is_off = msg.type == "note_off" or msg.velocity == 0
+        note_number: int = msg.note
+        is_off = _is_note_off(msg)
 
-        if pending.get(note):
-            pending_note = pending[note].pop(0)
+        if pending.get(note_number):
+            pending_note = pending[note_number].pop(0)
             note_events.append(
                 MidiNoteEvent(
-                    midi_note=note,
+                    midi_note=note_number,
                     tick_start=pending_note.tick_start,
                     tick_end=abs_tick,
                     velocity=pending_note.velocity,
                 )
             )
         if not is_off:
-            pending.setdefault(note, []).append(PendingNote(tick_start=abs_tick, velocity=msg.velocity))
+            pending.setdefault(note_number, []).append(PendingNote(tick_start=abs_tick, velocity=msg.velocity))
 
-    last_tick = raw_events[-1].abs_tick if raw_events else 0
-    for note, stack in pending.items():
+    last_tick = raw_events[-1].abs_tick
+    for note_number, stack in pending.items():
         for pending_note in stack:
             note_events.append(
                 MidiNoteEvent(
-                    midi_note=note,
+                    midi_note=note_number,
                     tick_start=pending_note.tick_start,
                     tick_end=last_tick,
                     velocity=pending_note.velocity,
                 )
             )
 
-    if not tempo_changes:
-        tempo_changes.append(TempoChange(tick=0, tempo=500_000))
-    if not time_sig_changes:
-        time_sig_changes.append(TimeSignatureChange(tick=0, numerator=4, denominator=4))
-
-    tempo_changes.sort(key=lambda tc: tc.tick)
-    time_sig_changes.sort(key=lambda tsc: tsc.tick)
     note_events.sort(key=lambda event: (event.tick_start, event.midi_note))
 
     return MidiData(

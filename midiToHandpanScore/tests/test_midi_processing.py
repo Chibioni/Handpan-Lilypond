@@ -16,7 +16,6 @@ from miditohandpanscore.midi_processing import (
     TempoChange,
     TimeSignatureChange,
     _read_track,
-    _select_tracks,
     read_midi,
 )
 
@@ -96,31 +95,6 @@ class TestReadTrack:
         assert tempo_changes[0].tick == 300  # 100 + 200
 
 
-# ---------------------------------------------------------------------------
-# _select_tracks
-# ---------------------------------------------------------------------------
-
-class TestSelectTracks:
-    def _make_mid(self, n_tracks: int) -> mido.MidiFile:
-        mid = mido.MidiFile(type=0 if n_tracks == 1 else 1)
-        for _ in range(n_tracks):
-            mid.tracks.append(mido.MidiTrack())
-        return mid
-
-    def test_none_returns_all_tracks(self):
-        mid = self._make_mid(3)
-        result = _select_tracks(mid, None)
-        assert len(result) == 3
-
-    def test_index_0_returns_first_track(self):
-        mid = self._make_mid(2)
-        result = _select_tracks(mid, 0)
-        assert len(result) == 1
-
-    def test_index_out_of_range_exits(self):
-        mid = self._make_mid(2)
-        with pytest.raises(SystemExit):
-            _select_tracks(mid, 5)
 
 
 # ---------------------------------------------------------------------------
@@ -200,15 +174,18 @@ class TestReadMidiFixture:
         assert ev.tick_end - ev.tick_start == Qdd
 
 
-class TestReadMidiTrackIndex:
-    def test_track_index_0_same_as_none(self):
-        data_none = read_midi(FIXTURE_MID, track_index=None)
-        data_0    = read_midi(FIXTURE_MID, track_index=0)
-        assert len(data_none.events) == len(data_0.events)
-
-    def test_track_index_out_of_range_exits(self):
+class TestReadMidiMultipleNoteTracks:
+    def test_multiple_note_tracks_exits(self, tmp_path):
+        mid = mido.MidiFile(type=1, ticks_per_beat=480)
+        for _ in range(2):
+            track = mido.MidiTrack()
+            track.append(mido.Message("note_on",  note=60, velocity=64, time=0))
+            track.append(mido.Message("note_off", note=60, velocity=0,  time=480))
+            mid.tracks.append(track)
+        path = tmp_path / "multi.mid"
+        mid.save(str(path))
         with pytest.raises(SystemExit):
-            read_midi(FIXTURE_MID, track_index=99)
+            read_midi(path)
 
 
 class TestReadMidiDefaults:
