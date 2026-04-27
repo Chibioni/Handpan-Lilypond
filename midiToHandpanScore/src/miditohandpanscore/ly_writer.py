@@ -24,7 +24,7 @@ def _split_chunks(events: list[ScoreEvent], bars_per_chunk: int) -> list[list[Sc
     bar_count = 0
 
     for event in events:
-        if not isinstance(event, BarLine):
+        if not isinstance(event, BarLine) or event.tied:
             current.append(event)
             continue
 

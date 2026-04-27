@@ -2,6 +2,7 @@
 
 import sys
 from collections.abc import Iterator
+from dataclasses import replace
 from typing import NamedTuple
 
 from .midi_processing import MidiData, TimeSignatureChange
@@ -14,6 +15,7 @@ from .score_events import (
     Rest,
     ScoreEvent,
     Technique,
+    Tie,
     ToneFieldNote,
 )
 from .tf_lookup import (
@@ -229,6 +231,82 @@ def _resolve_event(
 
 
 # ---------------------------------------------------------------------------
+# Chord emission helpers
+# ---------------------------------------------------------------------------
+
+def _emit_chord(
+    part_events: list[list[ScoreEvent]],
+    tonefields_per_part: list[list[ToneFieldNote]],
+    n_parts: int,
+    chord_dur_str: DurationStr,
+) -> None:
+    """全パートに Chord または非表示 Rest を追加する。
+
+    音符が存在するパートには Chord を、存在しないパートには Rest(hidden=True) を追加する。
+
+    Args:
+        part_events: パートごとの ScoreEvent リスト（破壊的に変更される）。
+        tonefields_per_part: パートごとの ToneFieldNote リスト。
+        n_parts: パート数。
+        chord_dur_str: 全音符に適用する共通音価文字列。
+    """
+    for part_index in range(n_parts):
+        tonefields = tonefields_per_part[part_index]
+        if not tonefields:
+            part_events[part_index].append(Rest(duration=chord_dur_str, hidden=True))
+        else:
+            part_events[part_index].append(Chord(notes=tonefields, duration=chord_dur_str))
+
+
+def _emit_cross_bar_chord(
+    part_events: list[list[ScoreEvent]],
+    tonefields_per_part: list[list[ToneFieldNote]],
+    n_parts: int,
+    dur_str_1: DurationStr,
+    dur_str_2: DurationStr,
+    generator: Iterator[int],
+) -> int:
+    """小節またぎ和音をタイで分割して全パートに挿入し、更新後の next_tick を返す。
+
+    Part1（小節前）に Tie を付加し、tied=True の BarLine を挟んで
+    Part2（小節後、アーティキュレーション NORMAL）を追加する。
+    音符が存在しないパートには各部に Rest(hidden=True) を挿入して全パートの位置を揃える。
+
+    Args:
+        part_events: パートごとの ScoreEvent リスト（破壊的に変更される）。
+        tonefields_per_part: パートごとの ToneFieldNote リスト。
+        n_parts: パート数。
+        dur_str_1: 小節前（Part1）の音価文字列。
+        dur_str_2: 小節後（Part2）の音価文字列。
+        generator: 小節境界 tick を生成するジェネレータ。next() を1回消費する。
+
+    Returns:
+        更新後の next_tick（BarLine 挿入後に generator から取得した次の小節境界）。
+    """
+    # Part1: 小節前の音符を dur_str_1 で emit し、音符があるパートに Tie を追加する。
+    part_1: list[list[ToneFieldNote]] = []
+    for notes in tonefields_per_part:
+        part_1.append([replace(n, duration=dur_str_1) for n in notes])
+    _emit_chord(part_events, part_1, n_parts, dur_str_1)
+    for part_index, tonefields in enumerate(tonefields_per_part):
+        if tonefields:
+            part_events[part_index].append(Tie())
+
+    # 全パートに tied=True の BarLine を追加し、小節境界を進める。
+    for part_event_list in part_events:
+        part_event_list.append(BarLine(tied=True))
+    next_tick = next(generator)
+
+    # Part2: 小節後の音符を dur_str_2・Articulation.NORMAL で emit する。
+    part_2: list[list[ToneFieldNote]] = []
+    for notes in tonefields_per_part:
+        part_2.append([replace(n, articulation=Articulation.NORMAL, duration=dur_str_2) for n in notes])
+    _emit_chord(part_events, part_2, n_parts, dur_str_2)
+
+    return next_tick
+
+
+# ---------------------------------------------------------------------------
 # Token generation
 # ---------------------------------------------------------------------------
 
@@ -318,15 +396,15 @@ def events_to_tokens_per_part(
             continue
 
         # この tick の各実音ノートを ToneFieldNote に解決し、パートごとに振り分ける。
-        # part_resolved[i] にはパート i に属するノートが入る。
-        part_resolved: list[list[ToneFieldNote]] = [[] for _ in range(n_parts)]
+        # tonefields_per_part[i] には現在 tick でパート i に属するノートが入る。
+        tonefields_per_part: list[list[ToneFieldNote]] = [[] for _ in range(n_parts)]
         chord_dur_beats = 0.0
 
         for event in real_notes:
             note = _resolve_event(event, event_tick, ticks_per_beat, min_beats, priority, norm_info, normalize_minor, warn_label, technique)
             if note is None:
                 continue
-            part_resolved[note.part_index].append(note)
+            tonefields_per_part[note.part_index].append(note)
             # 同 tick に音価が異なる複数ノートがある場合、最長を和音の共通音価とする。
             chord_dur_beats = max(chord_dur_beats, DUR_TO_BEATS[note.duration])
 
@@ -335,13 +413,18 @@ def events_to_tokens_per_part(
             continue
         chord_dur_str = quantize(chord_dur_beats)
 
-        # パートごとに Chord または非表示 Rest を追加してタイミングを揃える。
-        # 演奏していないパートにも Rest を入れることで全パートの位置が一致する。
-        for part_index in range(n_parts):
-            resolved = part_resolved[part_index]
-            if not resolved:
-                part_events[part_index].append(Rest(duration=chord_dur_str, hidden=True))
-            else:
-                part_events[part_index].append(Chord(notes=resolved, duration=chord_dur_str))
+        # 小節またぎチェック: chord の終端が次の小節境界を超える場合はタイで分割する。
+        chord_end_tick = event_tick + round(DUR_TO_BEATS[chord_dur_str] * ticks_per_beat)
+
+        if chord_end_tick <= next_tick: # 通常の処理
+            _emit_chord(part_events, tonefields_per_part, n_parts, chord_dur_str)
+            continue
+
+        #タイの処理
+        dur_str_1 = quantize((next_tick - event_tick) / ticks_per_beat)
+        dur_str_2 = quantize((chord_end_tick - next_tick) / ticks_per_beat)
+        next_tick = _emit_cross_bar_chord(
+            part_events, tonefields_per_part, n_parts, dur_str_1, dur_str_2, generator
+        )
 
     return part_events

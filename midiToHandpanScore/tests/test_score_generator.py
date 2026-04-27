@@ -21,6 +21,7 @@ from miditohandpanscore.score_events import (
     Rest,
     ScoreEvent,
     Technique,
+    Tie,
     ToneFieldNote,
 )
 from miditohandpanscore.score_generator import events_to_tokens, events_to_tokens_per_part
@@ -381,3 +382,50 @@ class TestGenerateSetScoreLy:
         assert result.count("\\HandpanScore") == 2
         assert '"0-4"' in result
         assert '"1-4"' in result
+
+
+# ---------------------------------------------------------------------------
+# cross-bar tie
+# ---------------------------------------------------------------------------
+
+class TestCrossBarTie:
+    def test_note_crossing_bar_generates_tie(self, kurd9):
+        # tick=Q*3（第4拍）から 2拍の音符 → 小節境界 tick=Q*4 を越える
+        events = [make_event(57, Q * 3, Q * 2)]
+        tokens = events_to_tokens(make_midi_data(events), kurd9)
+        assert any(isinstance(e, Tie) for e in tokens)
+
+    def test_note_not_crossing_bar_no_tie(self, kurd9):
+        # 1拍・小節内に収まる
+        events = [make_event(57, 0, Q)]
+        tokens = events_to_tokens(make_midi_data(events), kurd9)
+        assert not any(isinstance(e, Tie) for e in tokens)
+
+    def test_tie_before_barline(self, kurd9):
+        events = [make_event(57, Q * 3, Q * 2)]
+        tokens = events_to_tokens(make_midi_data(events), kurd9)
+        tie_idx = next(i for i, e in enumerate(tokens) if isinstance(e, Tie))
+        bar_idx = next(i for i, e in enumerate(tokens) if isinstance(e, BarLine))
+        assert tie_idx < bar_idx
+
+    def test_cross_bar_tied_barline_not_chunk_boundary(self, kurd9):
+        events = [make_event(57, Q * 3, Q * 2)]
+        tokens = events_to_tokens(make_midi_data(events), kurd9)
+        tied_bars = [e for e in tokens if isinstance(e, BarLine) and e.tied]
+        assert len(tied_bars) == 1
+
+    def test_cross_bar_same_tf_both_sides(self, kurd9):
+        # タイの前後で同じ TF 番号の音符が生成される（A3 = TF1）
+        events = [make_event(57, Q * 3, Q * 2)]
+        tokens = events_to_tokens(make_midi_data(events), kurd9)
+        chords = [e for e in tokens if isinstance(e, Chord)]
+        assert len(chords) == 2
+        assert chords[0].notes[0].number == chords[1].notes[0].number
+
+    def test_cross_bar_part2_articulation_normal(self, kurd9):
+        # アクセント付き音符が小節をまたぐ場合、Part2 は NORMAL になる
+        events = [make_event(57, Q * 3, Q * 2, velocity=127)]
+        tokens = events_to_tokens(make_midi_data(events), kurd9)
+        chords = [e for e in tokens if isinstance(e, Chord)]
+        assert chords[0].notes[0].articulation == Articulation.ACCENT
+        assert chords[1].notes[0].articulation == Articulation.NORMAL

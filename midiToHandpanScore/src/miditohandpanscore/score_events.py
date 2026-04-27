@@ -117,8 +117,26 @@ class Rest(ScoreEvent):
 
 
 @dataclass
+class Tie(ScoreEvent):
+    """タイ記号（~）。直前の Chord / ToneFieldNote を次の音符と結ぶ。"""
+
+    def to_token(self) -> Token:
+        """タイトークン "~" を返す。
+
+        Returns:
+            常に "~"。
+        """
+        return "~"
+
+
+@dataclass
 class BarLine(ScoreEvent):
-    """小節線イベント。"""
+    """小節線イベント。
+
+    Attributes:
+        tied: True の場合は _split_chunks の chunk 境界にしない（タイ途中の小節線）。
+    """
+    tied: bool = False
 
     def to_token(self) -> Token:
         """ハンドパン記法の小節線トークン "|" を返す。
