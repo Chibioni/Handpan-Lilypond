@@ -1,4 +1,4 @@
-"""Scale and ensemble definitions."""
+"""Scale and handpan set definitions."""
 
 from ..models import HandpanScale, HandpanPart, HandpanSet
 

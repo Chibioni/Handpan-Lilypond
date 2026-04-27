@@ -64,7 +64,7 @@ def run(args: argparse.Namespace) -> None:
         if key in SCALES:
             targets.append(("scale", key))
         elif key in SETS:
-            targets.append(("ensemble", key))
+            targets.append(("handpan_set", key))
         else:
             print(f"[ERROR] Scale not found: {key}", file=sys.stderr)
             sys.exit(1)
@@ -72,7 +72,7 @@ def run(args: argparse.Namespace) -> None:
         for key in SCALES:
             targets.append(("scale", key))
         for key in SETS:
-            targets.append(("ensemble", key))
+            targets.append(("handpan_set", key))
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -81,7 +81,7 @@ def run(args: argparse.Namespace) -> None:
             scale = SCALES[key]
             content = generate_scale_ly(scale)
             out_path = output_dir / f"{scale.name}.ly"
-        else:
+        elif kind == "handpan_set":
             handpan_set = SETS[key]
             content = generate_set_ly(handpan_set)
             out_path = output_dir / f"{handpan_set.name}.ly"

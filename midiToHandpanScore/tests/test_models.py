@@ -72,7 +72,7 @@ class TestHandpanScale:
 
 class TestHandpanSet:
     @pytest.fixture
-    def ensemble(self):
+    def handpan_set(self):
         scale_a = HandpanScale("Kurd", ["D4", "A4", "Bb4", "C5", "D5"], "2b")
         scale_b = HandpanScale("Kurd", ["A3", "E4", "F4", "G4", "A4"], "2b")
         return HandpanSet(
@@ -81,14 +81,14 @@ class TestHandpanSet:
             key_signature="2b",
         )
 
-    def test_name(self, ensemble):
-        assert ensemble.name == "D_Kurd10"
+    def test_name(self, handpan_set):
+        assert handpan_set.name == "D_Kurd10"
 
-    def test_part_ly_pitches_ding_is_minus_one(self, ensemble):
-        pitches = ensemble.part_ly_pitches(0)
-        assert pitches[0] == -1  # D4 = ding of ensemble
+    def test_part_ly_pitches_ding_is_minus_one(self, handpan_set):
+        pitches = handpan_set.part_ly_pitches(0)
+        assert pitches[0] == -1  # D4 = ding of the handpan set
 
-    def test_part_ly_pitches_uses_all_notes(self, ensemble):
+    def test_part_ly_pitches_uses_all_notes(self, handpan_set):
         # part 1 の A3 は全音符でソートすると ding(D4) より低い → 負の値
-        pitches_b = ensemble.part_ly_pitches(1)
+        pitches_b = handpan_set.part_ly_pitches(1)
         assert pitches_b[0] < -1  # A3 < D4

@@ -152,7 +152,7 @@ class TestRun:
         assert '\\version "2.24.4"' in content
         assert "d_kurd9" in content
 
-    def test_generates_ensemble_ly_file(self, tmp_path):
+    def test_generates_handpan_set_ly_file(self, tmp_path):
         run(make_run_args(scale="f_sharp_minor18", output_dir=str(tmp_path)))
         assert len(list(tmp_path.glob("*.ly"))) == 1
 

@@ -24,7 +24,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--scale", metavar="SCALE_NAME", help="スケール名 (例: d_kurd9)")
-    mode.add_argument("--ensemble", metavar="SET_NAME", help="セット名 (例: f_sharp_minor18)")
+    mode.add_argument("--handpan-set", metavar="SET_NAME", help="ハンドパンセット名 (例: f_sharp_minor18)")
 
     parser.add_argument("--output", metavar="FILE", help="出力 .ly ファイルパス")
     parser.add_argument("--min-duration", default="32", metavar="DUR", help="最小音価 (デフォルト: 32)")
@@ -72,10 +72,10 @@ def run(args: argparse.Namespace) -> None:
         tokens = events_to_tokens(midi_data, scale, args.min_duration, args.normalize_minor)
         content = generate_score_ly(tokens, scale, args.bars_per_chunk)
     else:
-        if args.ensemble not in SETS:
-            print(f"[ERROR] Ensemble not found: {args.ensemble}", file=sys.stderr)
+        if args.handpan_set not in SETS:
+            print(f"[ERROR] Handpan set not found: {args.handpan_set}", file=sys.stderr)
             sys.exit(1)
-        handpan_set = SETS[args.ensemble]
+        handpan_set = SETS[args.handpan_set]
         part_tokens = events_to_tokens_per_part(midi_data, handpan_set, args.min_duration, args.normalize_minor)
         content = generate_set_score_ly(part_tokens, handpan_set, args.bars_per_chunk)
 

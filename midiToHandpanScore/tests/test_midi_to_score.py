@@ -21,7 +21,7 @@ def make_args(**kwargs) -> argparse.Namespace:
     defaults = dict(
         input=str(FIXTURE_MID),
         scale="d_kurd9",
-        ensemble=None,
+        handpan_set=None,
         output=None,
         min_duration="32",
         bars_per_chunk=4,
@@ -39,18 +39,18 @@ class TestParseArgs:
     def test_scale_mode(self):
         args = parse_args([str(FIXTURE_MID), "--scale", "d_kurd9"])
         assert args.scale == "d_kurd9"
-        assert args.ensemble is None
+        assert args.handpan_set is None
 
-    def test_ensemble_mode(self):
-        args = parse_args([str(FIXTURE_MID), "--ensemble", "f_sharp_minor18"])
-        assert args.ensemble == "f_sharp_minor18"
+    def test_handpan_set_mode(self):
+        args = parse_args([str(FIXTURE_MID), "--handpan-set", "f_sharp_minor18"])
+        assert args.handpan_set == "f_sharp_minor18"
         assert args.scale is None
 
-    def test_scale_and_ensemble_mutually_exclusive(self):
+    def test_scale_and_handpan_set_mutually_exclusive(self):
         with pytest.raises(SystemExit):
-            parse_args([str(FIXTURE_MID), "--scale", "d_kurd9", "--ensemble", "f_sharp_minor18"])
+            parse_args([str(FIXTURE_MID), "--scale", "d_kurd9", "--handpan-set", "f_sharp_minor18"])
 
-    def test_missing_scale_and_ensemble(self):
+    def test_missing_scale_and_handpan_set(self):
         with pytest.raises(SystemExit):
             parse_args([str(FIXTURE_MID)])
 
@@ -121,27 +121,27 @@ class TestRunScaleMode:
 
 
 # ---------------------------------------------------------------------------
-# run — --ensemble モード
+# run — --handpan-set モード
 # ---------------------------------------------------------------------------
 
 class TestRunEnsembleMode:
     def test_generates_ly_file(self, tmp_path):
         out = tmp_path / "out.ly"
-        run(make_args(scale=None, ensemble="f_sharp_minor18", output=str(out)))
+        run(make_args(scale=None, handpan_set="f_sharp_minor18", output=str(out)))
         assert out.exists()
         assert out.stat().st_size > 0
 
     def test_output_contains_simultaneous_block(self, tmp_path):
         out = tmp_path / "out.ly"
-        run(make_args(scale=None, ensemble="f_sharp_minor18", output=str(out)))
+        run(make_args(scale=None, handpan_set="f_sharp_minor18", output=str(out)))
         content = out.read_text()
         assert "<<" in content
         assert ">>" in content
 
-    def test_unknown_ensemble_exits(self, tmp_path):
+    def test_unknown_handpan_set_exits(self, tmp_path):
         out = tmp_path / "out.ly"
         with pytest.raises(SystemExit):
-            run(make_args(scale=None, ensemble="unknown_set", output=str(out)))
+            run(make_args(scale=None, handpan_set="unknown_set", output=str(out)))
 
 
 # ---------------------------------------------------------------------------
