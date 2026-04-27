@@ -6,6 +6,14 @@ _NATURAL_SEMITONES: dict[str, int] = {
     "C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11
 }
 
+_ACCIDENTAL_MAP: dict[str, int] = {
+    "": 0, "#": 1, "b": -1, "x": 2, "##": 2, "bb": -2
+}
+
+_ACCIDENTAL_NAMES: dict[int, list[str]] = {
+    0: [], 1: ["Sharp"], -1: ["Flat"], 2: ["Sharp", "Sharp"], -2: ["Flat", "Flat"]
+}
+
 
 class ParsedNote(NamedTuple):
     stem: str
@@ -35,28 +43,20 @@ def _parse_note_name(name: str) -> ParsedNote:
     if stem not in _NATURAL_SEMITONES:
         raise ValueError(f"Invalid note name: {name!r}")
 
-    index = 1
-    accidental = 0
-    # ダブルシャープ: "##" または "x"
-    if name[index:index + 2] == "##":
-        accidental = 2
-        index += 2
-    elif index < len(name) and name[index] == "x":
-        accidental = 2
-        index += 1
-    # ダブルフラット: "bb"
-    elif name[index:index + 2] == "bb":
-        accidental = -2
-        index += 2
-    # シングル
-    elif index < len(name) and name[index] == "#":
-        accidental = 1
-        index += 1
-    elif index < len(name) and name[index] == "b":
-        accidental = -1
-        index += 1
+    # オクターブ番号を末尾から先に確定
+    oct_idx = len(name)
+    while oct_idx > 1 and (name[oct_idx - 1].isdigit() or name[oct_idx - 1] == '-'):
+        oct_idx -= 1
+    try:
+        octave = int(name[oct_idx:])
+    except ValueError:
+        raise ValueError(f"Invalid octave number in note name: {name!r}") from None
 
-    octave = int(name[index:])
+    acc_str = name[1:oct_idx]
+    if acc_str not in _ACCIDENTAL_MAP:
+        raise ValueError(f"Invalid accidental {acc_str!r} in note name: {name!r}")
+    accidental = _ACCIDENTAL_MAP[acc_str]
+
     return ParsedNote(stem=stem, accidental=accidental, octave=octave)
 
 
@@ -93,13 +93,5 @@ def note_name_to_scale_identifier(note_name: str) -> str:
         スケール識別子プレフィックス文字列（例: "D", "F_Sharp", "B_Flat"）。
     """
     parsed = _parse_note_name(note_name)
-    parts = [parsed.stem]
-    if parsed.accidental == 1:
-        parts.append("Sharp")
-    elif parsed.accidental == -1:
-        parts.append("Flat")
-    elif parsed.accidental == 2:
-        parts += ["Sharp", "Sharp"]
-    elif parsed.accidental == -2:
-        parts += ["Flat", "Flat"]
+    parts = [parsed.stem] + _ACCIDENTAL_NAMES[parsed.accidental]
     return "_".join(parts)

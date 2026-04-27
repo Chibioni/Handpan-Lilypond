@@ -24,21 +24,40 @@ def _split_chunks(events: list[ScoreEvent], bars_per_chunk: int) -> list[list[Sc
     bar_count = 0
 
     for event in events:
-        if isinstance(event, BarLine):
-            bar_count += 1
-            if bar_count % bars_per_chunk == 0:
-                if current:
-                    chunks.append(current)
-                current = []
-            else:
-                current.append(event)
-        else:
+        if not isinstance(event, BarLine):
             current.append(event)
+            continue
+
+        bar_count += 1
+        if bar_count % bars_per_chunk != 0:
+            current.append(event)
+            continue
+
+        if current:
+            chunks.append(current)
+        current = []
 
     if current:
         chunks.append(current)
 
     return chunks
+
+
+def _handpan_score_blocks(events: list[ScoreEvent], bars_per_chunk: int) -> list[str]:
+    """events を bars_per_chunk 小節ごとに分割し、\\HandpanScore "..." 文字列のリストを返す。
+
+    Args:
+        events: ScoreEvent のリスト。
+        bars_per_chunk: 1ブロックあたりの小節数。
+
+    Returns:
+        \\HandpanScore "..." 文字列のリスト。
+    """
+    result: list[str] = []
+    for chunk in _split_chunks(events, bars_per_chunk):
+        tokens = " ".join(e.to_token() for e in chunk)
+        result.append(f'\\HandpanScore "{tokens}"')
+    return result
 
 
 def _ly_preamble(title: str, scale_name: str, key_sig: str) -> str:
@@ -81,11 +100,8 @@ def generate_score_ly(
     Returns:
         LilyPond ファイルの内容文字列（.ly ファイルとしてそのまま書き出せる）。
     """
-    chunks = _split_chunks(events, bars_per_chunk)
-    score_blocks = "\n    ".join(
-        f'\\HandpanScore "{" ".join(e.to_token() for e in chunk)}"'
-        for chunk in chunks
-    )
+    blocks = _handpan_score_blocks(events, bars_per_chunk)
+    score_blocks = "\n    ".join(blocks)
     return (
         _ly_preamble(scale.name, scale.name, scale.key_signature)
         + f"    \\SetTranslateTable #{scale.ly_name}\n"
@@ -111,20 +127,21 @@ def generate_set_score_ly(
     Returns:
         LilyPond ファイルの内容文字列（.ly ファイルとしてそのまま書き出せる）。
     """
-    n_parts = len(handpan_set.parts)
-    chunks_per_part = [_split_chunks(pe, bars_per_chunk) for pe in part_events]
-    n_chunks = max(len(chunks) for chunks in chunks_per_part)
+    blocks_per_part = [_handpan_score_blocks(pe, bars_per_chunk) for pe in part_events]
+    n_chunks = len(blocks_per_part[0])
+    if not all(len(b) == n_chunks for b in blocks_per_part):
+        raise RuntimeError("パート間でチャンク数が一致しない")
 
     chunk_blocks: list[str] = []
     for chunk_index in range(n_chunks):
         lines = ["    <<"]
         for part_index, part in enumerate(handpan_set.parts):
-            part_chunks = chunks_per_part[part_index]
-            chunk = part_chunks[chunk_index] if chunk_index < len(part_chunks) else []
-            lines.append(f"      \\SetTranslateTable #{part.instrument_name}")
-            lines.append(f'      \\absolute {{ \\HandpanScore "{" ".join(e.to_token() for e in chunk)}" }}')
-            if part_index < n_parts - 1:
+            if part_index > 0:
                 lines.append("      \\\\")
+            part_blocks = blocks_per_part[part_index]
+            block = part_blocks[chunk_index]
+            lines.append(f"      \\SetTranslateTable #{part.instrument_name}")
+            lines.append(f"      \\absolute {{ {block} }}")
         lines.append("    >>")
         chunk_blocks.append("\n".join(lines))
 

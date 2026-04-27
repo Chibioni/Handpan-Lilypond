@@ -34,6 +34,18 @@ class TestNoteNameToMidi:
         with pytest.raises((ValueError, KeyError)):
             note_name_to_midi("H4")
 
+    def test_invalid_accidental_raises(self):
+        with pytest.raises(ValueError, match="Invalid accidental"):
+            note_name_to_midi("C$4")
+
+    def test_missing_octave_raises(self):
+        with pytest.raises(ValueError, match="Invalid octave number"):
+            note_name_to_midi("C#")
+
+    def test_double_minus_octave_raises(self):
+        with pytest.raises(ValueError):
+            note_name_to_midi("C--1")
+
 
 # ---------------------------------------------------------------------------
 # note_name_to_scale_identifier
