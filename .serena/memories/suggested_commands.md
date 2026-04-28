@@ -24,7 +24,7 @@ PDF と MIDI が生成される。
 # MIDI → ハンドパン楽譜 (.ly) に変換
 cd /Users/chibioni/Github/Handpan-Lilypond/midiToHandpanScore
 uv run handpan-midi-to-score input.mid --scale d_kurd9
-uv run handpan-midi-to-score input.mid --ensemble f_sharp_minor18
+uv run handpan-midi-to-score input.mid --handpan-set f_sharp_minor18
 
 # スケール定義 .ly ファイルを生成
 uv run handpan-generate-scales
