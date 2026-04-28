@@ -7,7 +7,7 @@ from typing import NamedTuple
 
 from .midi_processing import MidiData, TimeSignatureChange
 from .models import MidiNoteEvent, HandpanScale, HandpanPart, HandpanSet
-from .quantize import DUR_TO_BEATS, DurationStr, quantize
+from .quantize import DURATION_TABLE, DUR_TO_BEATS, DurationStr, quantize
 from .score_events import (
     Articulation,
     BarLine,
@@ -28,6 +28,65 @@ from .tf_lookup import (
 )
 
 _TECHNIQUE_MIDI: dict[int, Technique] = {0: Technique.APEX, 1: Technique.SLAP}
+_BEAT_EPSILON = 1e-9
+
+
+# ---------------------------------------------------------------------------
+# Rest decomposition helpers
+# ---------------------------------------------------------------------------
+
+def _decompose_beats(remaining_beats: float) -> list[DurationStr]:
+    """拍数を DURATION_TABLE の音価文字列列に分解する（グリーディ・大きい順）。
+
+    Args:
+        remaining_beats: 分解対象の拍数（例: 0.375 → ["16."]、3.0 → ["2."]、5.0 → ["1", "4"]）。
+
+    Returns:
+        音価文字列のリスト。大きい音価から順に並ぶ。
+    """
+    result: list[DurationStr] = []
+    for entry in DURATION_TABLE:
+        while remaining_beats >= entry.beats - _BEAT_EPSILON:
+            result.append(entry.duration_str)
+            remaining_beats -= entry.beats
+    return result
+
+
+def _emit_rests_and_bars(
+    events: list[ScoreEvent],
+    cursor_tick: int,
+    target_tick: int,
+    generator: Iterator[int],
+    next_bar_tick: int,
+    ticks_per_beat: int,
+) -> int:
+    """cursor_tick から target_tick までの無音区間を Rest と BarLine で埋める。
+
+    cursor_tick より前の BarLine はすでに挿入済みであることを前提とする。
+    この関数は cursor_tick 以降の空白のみを担当し、それ以前の状態はメインループが保証する。
+
+    Args:
+        events: 追加先の ScoreEvent リスト（破壊的に変更される）。
+        cursor_tick: 無音区間の開始 tick。
+        target_tick: 無音区間の終了 tick（この tick は含まない）。
+        generator: 小節境界 tick を生成するジェネレータ。必要な回数だけ next() を消費する。
+        next_bar_tick: 現在有効な次の小節境界 tick。
+        ticks_per_beat: MIDI ファイルの ticks_per_beat（PPQ）。
+
+    Returns:
+        更新後の next_bar_tick。
+    """
+    pos = cursor_tick
+    while pos < target_tick:
+        if pos >= next_bar_tick:
+            events.append(BarLine())
+            next_bar_tick = next(generator)
+        segment_end = min(target_tick, next_bar_tick)
+        gap_beats = (segment_end - pos) / ticks_per_beat
+        for dur_str in _decompose_beats(gap_beats):
+            events.append(Rest(duration=dur_str))
+        pos = segment_end
+    return next_bar_tick
 
 
 # ---------------------------------------------------------------------------
@@ -379,9 +438,20 @@ def events_to_tokens_per_part(
 
     # パートごとの ScoreEvent リスト（インデックスは handpan_set.parts の順）
     part_events: list[list[ScoreEvent]] = [[] for _ in range(n_parts)]
+    cursor_tick = 0
 
     # --- メインループ: tick ごとにイベントを処理 ---
     for event_tick in sorted_ticks:
+
+        # ノート間にギャップがあれば、全パートに Rest と BarLine を挿入する。
+        if event_tick > cursor_tick:
+            gap_events: list[ScoreEvent] = []
+            next_tick = _emit_rests_and_bars(
+                gap_events, cursor_tick, event_tick, generator, next_tick, ticks_per_beat
+            )
+            for part_event_list in part_events:
+                part_event_list.extend(gap_events)
+            cursor_tick = event_tick
 
         # この tick の前に通過した小節境界ぶんの BarLine を全パートに挿入する。
         # ノート間に複数小節の無音区間がある場合は複数回挿入される。
@@ -418,6 +488,7 @@ def events_to_tokens_per_part(
 
         if chord_end_tick <= next_tick: # 通常の処理
             _emit_chord(part_events, tonefields_per_part, n_parts, chord_dur_str)
+            cursor_tick = chord_end_tick
             continue
 
         #タイの処理
@@ -426,5 +497,6 @@ def events_to_tokens_per_part(
         next_tick = _emit_cross_bar_chord(
             part_events, tonefields_per_part, n_parts, dur_str_1, dur_str_2, generator
         )
+        cursor_tick = chord_end_tick
 
     return part_events

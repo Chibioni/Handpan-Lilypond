@@ -96,6 +96,7 @@ EXPECTED_TOKENS = [
     "S5-4",   # E4 + スラップ
     "6-8.",   # F4 付点8分
     "7-8..",  # G4 二重付点8分
+    "R-16.", # G4 終了後のギャップ (180 ticks = 0.375 beats)
     "|",
     # 小節3: ハーモニクス
     "2^1-4",  # Bb4 = Bb3+12 ハーモニクス1
@@ -239,6 +240,47 @@ class TestEventsToTokensPerPart:
         part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
         assert part_tokens[0][0].to_token() == "O0-4"
         assert part_tokens[1][0].to_token().startswith("H-")
+
+
+# ---------------------------------------------------------------------------
+# TestRestInsertion
+# ---------------------------------------------------------------------------
+
+class TestRestInsertion:
+    def test_gap_between_notes_inserts_rest(self, kurd9):
+        events = [
+            make_event(57, 0,    Q),   # A3 1拍
+            make_event(60, Q*2,  Q),   # C4 (gap = 1拍)
+        ]
+        tokens = events_to_tokens(make_midi_data(events), kurd9)
+        assert any(isinstance(e, Rest) and not e.hidden for e in tokens)
+
+    def test_gap_spanning_bar_line_splits(self, kurd9):
+        events = [
+            make_event(57, 0,    Q),
+            make_event(60, Q*5,  Q),
+        ]
+        tokens = events_to_tokens(make_midi_data(events), kurd9)
+        bar_idx = next(i for i, e in enumerate(tokens) if isinstance(e, BarLine) and not e.tied)
+        assert any(isinstance(e, Rest) for e in tokens[:bar_idx])
+        assert any(isinstance(e, Rest) for e in tokens[bar_idx+1:])
+
+    def test_no_rest_when_notes_adjacent(self, kurd9):
+        events = [
+            make_event(57, 0, Q),
+            make_event(60, Q, Q),
+        ]
+        tokens = events_to_tokens(make_midi_data(events), kurd9)
+        assert not any(isinstance(e, Rest) and not e.hidden for e in tokens)
+
+    def test_per_part_gap_inserts_rest_in_all_parts(self, two_part_set):
+        events = [
+            make_event(62, 0,   Q),   # D4 = PartA
+            make_event(57, Q*2, Q),   # A3 = PartB  (gap = 1拍)
+        ]
+        part_tokens = events_to_tokens_per_part(make_midi_data(events), two_part_set)
+        assert any(isinstance(e, Rest) and not e.hidden for e in part_tokens[0])
+        assert any(isinstance(e, Rest) and not e.hidden for e in part_tokens[1])
 
 
 # ---------------------------------------------------------------------------
